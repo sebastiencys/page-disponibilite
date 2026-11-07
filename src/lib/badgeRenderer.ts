@@ -1,6 +1,6 @@
 /**
  * Dynamic Badge Renderer for Email Signatures.
- * Generates vector SVG and high-resolution anti-aligned PNG images with robust typography.
+ * Generates vector SVG and high-resolution anti-aliased PNG images with robust typography.
  */
 
 import { Resvg } from '@resvg/resvg-js';
@@ -65,8 +65,8 @@ export function renderBadgeSvg(
   const safeRole = escapeXml(role);
   const safeCompany = escapeXml(company);
 
-  // Pile de polices universelle reconnue instantanément par resvg sans erreur de buffer
-  const ff = `font-family="Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"`;
+  // SIMPLIFICATION CRITIQUE : Un nom de police simple sans guillemets complexes pour resvg
+  const ff = `font-family="sans-serif"`;
 
   const fontDef = `
     <defs>
@@ -179,7 +179,7 @@ export function renderBadgePng(
       shapeRendering: 2,
       imageRendering: 0,
       font: {
-        loadSystemFonts: true, // Autorise l'utilisation des polices de secours du système/resvg
+        loadSystemFonts: true, // Permet à resvg de piocher dans les polices de base du conteneur Vercel
       },
     });
     const pngData = resvg.render();
