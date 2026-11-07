@@ -65,3 +65,4 @@ Consultez l'onglet **Générateur de Signature** et **Guide & Astuces** directem
 - Cacher le studio derrière un mot de passe (inscrit dans le .env)
 - Afficher la liste des prochains RDV tout en restant secret (pas de nom, pas de participants)
 - Vérifier le libellé "Libre jusqu'à xx H" jusqu'à fin de la journée si pas de RDV prévu
+- Ajouter un simulateur où l'on choisit la date et l'heure et il nous présente le badge prévu
