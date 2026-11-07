@@ -1,28 +1,14 @@
 /**
  * Dynamic Badge Renderer for Email Signatures.
- * Generates vector SVG and high-resolution anti-aliased PNG images with modern typography.
+ * Generates vector SVG and high-resolution anti-aligned PNG images with robust typography.
  */
 
 import { Resvg } from '@resvg/resvg-js';
 import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
-import { PLUS_JAKARTA_SANS_BOLD_B64, PLUS_JAKARTA_SANS_REGULAR_B64 } from './fonts.ts';
 
-// Fonts are embedded at build-time as base64 strings — no filesystem access needed on serverless
-let cachedFontBuffers: Buffer[] | null = null;
-
-export function getFontBuffers(): Buffer[] {
-  if (cachedFontBuffers !== null && cachedFontBuffers.length > 0) {
-    return cachedFontBuffers;
-  }
-  cachedFontBuffers = [
-    Buffer.from(PLUS_JAKARTA_SANS_BOLD_B64, 'base64'),
-    Buffer.from(PLUS_JAKARTA_SANS_REGULAR_B64, 'base64'),
-  ];
-  return cachedFontBuffers;
-}
-
-export async function ensureFontsLoaded(): Promise<Buffer[]> {
-  return getFontBuffers();
+// Fonction factice conservée pour éviter de casser badge.ts
+export async function ensureFontsLoaded(): Promise<any[]> {
+  return [];
 }
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
@@ -51,7 +37,7 @@ function escapeXml(unsafe: string): string {
 }
 
 /**
- * Generates dynamic SVG badge with live status and modern multiline typography
+ * Generates dynamic SVG badge with live status and clean typography
  */
 export function renderBadgeSvg(
   avail: AvailabilityResult,
@@ -79,14 +65,11 @@ export function renderBadgeSvg(
   const safeRole = escapeXml(role);
   const safeCompany = escapeXml(company);
 
-  // Utilisation exclusive du nom de la police embarquée pour resvg
-  const ff = `font-family="Plus Jakarta Sans"`;
+  // Pile de polices universelle reconnue instantanément par resvg sans erreur de buffer
+  const ff = `font-family="Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"`;
 
   const fontDef = `
     <defs>
-      <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap');
-      </style>
       <filter id="dot-glow" x="-40%" y="-40%" width="180%" height="180%">
         <feGaussianBlur stdDeviation="3" result="blur" />
         <feComposite in="SourceGraphic" in2="blur" operator="over" />
@@ -182,7 +165,7 @@ export function renderBadgeSvg(
 }
 
 /**
- * Generates dynamic PNG image for email signatures using high-resolution vector rasterization via resvg.
+ * Generates dynamic PNG image for email signatures using resvg.
  */
 export function renderBadgePng(
   avail: AvailabilityResult,
@@ -190,16 +173,13 @@ export function renderBadgePng(
 ): Buffer {
   const svg = renderBadgeSvg(avail, options);
   try {
-    const fontBuffers = getFontBuffers();
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'zoom', value: 1.5 },
       textRendering: 2,
       shapeRendering: 2,
       imageRendering: 0,
       font: {
-        loadSystemFonts: false,
-        fontBuffers: fontBuffers.length > 0 ? fontBuffers : undefined,
-        defaultFontFamily: 'Plus Jakarta Sans',
+        loadSystemFonts: true, // Autorise l'utilisation des polices de secours du système/resvg
       },
     });
     const pngData = resvg.render();
