@@ -5,25 +5,6 @@
 
 import sharp from 'sharp';
 import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
-import { PLUS_JAKARTA_SANS_BOLD_B64, PLUS_JAKARTA_SANS_REGULAR_B64 } from './fonts.ts';
-
-// Fonts are embedded at build-time as base64 strings — no filesystem access needed on serverless
-let cachedFontBuffers: Buffer[] | null = null;
-
-export function getFontBuffers(): Buffer[] {
-  if (cachedFontBuffers !== null && cachedFontBuffers.length > 0) {
-    return cachedFontBuffers;
-  }
-  cachedFontBuffers = [
-    Buffer.from(PLUS_JAKARTA_SANS_BOLD_B64, 'base64'),
-    Buffer.from(PLUS_JAKARTA_SANS_REGULAR_B64, 'base64'),
-  ];
-  return cachedFontBuffers;
-}
-
-export async function ensureFontsLoaded(): Promise<Buffer[]> {
-  return getFontBuffers();
-}
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
 export type BadgeTheme = 'light' | 'dark' | 'transparent';
@@ -79,26 +60,11 @@ export function renderBadgeSvg(
   const safeRole = escapeXml(role);
   const safeCompany = escapeXml(company);
 
-  // Font family attribute applied directly to each <text> element for maximum compatibility
-  // (resvg does not process CSS @import, and a broken @import can invalidate the entire <style> block)
-  const ff = `font-family="Plus Jakarta Sans"`;
+  // Utilisation d'une police système universelle compatible à 100% avec sharp/librsvg
+  const ff = `font-family="Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"`;
 
-  // Defs block: Google Fonts @import kept for browser/SVG rendering, separated from font-family
-  // which is now an inline attribute on every <text> element for resvg compatibility
   const fontDef = `
     <defs>
-      <style>
-        @font-face {
-          font-family: 'Plus Jakarta Sans';
-          src: url(data:font/ttf;base64,${PLUS_JAKARTA_SANS_REGULAR_B64}) format('truetype');
-          font-weight: 500;
-        }
-        @font-face {
-          font-family: 'Plus Jakarta Sans';
-          src: url(data:font/ttf;base64,${PLUS_JAKARTA_SANS_BOLD_B64}) format('truetype');
-          font-weight: 750;
-        }
-      </style>
       <filter id="dot-glow" x="-40%" y="-40%" width="180%" height="180%">
         <feGaussianBlur stdDeviation="3" result="blur" />
         <feComposite in="SourceGraphic" in2="blur" operator="over" />
@@ -128,7 +94,7 @@ export function renderBadgeSvg(
 </svg>`;
   }
 
-  // 2. STYLE: PILL MODERNE (400x54 px - Multiligne aéré avec largeur optimisée PC/Mobile)
+  // 2. STYLE: PILL MODERNE (400x54 px)
   if (style === 'pill') {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="54" viewBox="0 0 400 54" fill="none">
@@ -143,13 +109,13 @@ export function renderBadgeSvg(
   </circle>
   <circle cx="26" cy="27" r="5.5" fill="${dotColor}" filter="url(#dot-glow)"/>
 
-  <!-- Multiline Text: Title on line 1, Subtitle on line 2 -->
+  <!-- Multiline Text -->
   <text x="48" y="23" font-size="13" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="48" y="39" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
   }
 
-  // 3. STYLE: CARTE COMPACTE (380x100 px - Widget encadré avec en-tête et boîte multiligne)
+  // 3. STYLE: CARTE COMPACTE (380x100 px)
   if (style === 'card') {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="380" height="100" viewBox="0 0 380 100" fill="none">
@@ -157,12 +123,12 @@ export function renderBadgeSvg(
   <!-- Outer Card -->
   <rect x="1" y="1" width="378" height="98" rx="14" fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5"/>
 
-  <!-- Header row: Dot + Name + Right Tag -->
+  <!-- Header row -->
   <circle cx="22" cy="20" r="4.5" fill="${dotColor}"/>
   <text x="34" y="24" font-size="14.5" font-weight="700" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
   <text x="362" y="23" text-anchor="end" font-size="11" font-weight="600" fill="${textSecondary}" ${ff}>Disponibilité en direct</text>
 
-  <!-- Inner Status Container (Multiligne) -->
+  <!-- Inner Status Container -->
   <rect x="14" y="36" width="352" height="50" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
 
   <!-- Status Dot inside container -->
@@ -171,13 +137,13 @@ export function renderBadgeSvg(
   </circle>
   <circle cx="32" cy="61" r="5" fill="${dotColor}"/>
 
-  <!-- Status Title (Line 1) & Schedule Subtitle (Line 2) -->
+  <!-- Status Title & Schedule Subtitle -->
   <text x="48" y="55" font-size="12.5" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="48" y="73" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
   }
 
-  // 4. STYLE: SIGNATURE COMPLÈTE (480x114 px - Bannière Tout-en-un spacieuse)
+  // 4. STYLE: SIGNATURE COMPLÈTE (480x114 px)
   const initials = (name || 'AM')
     .split(' ')
     .map(part => part[0])
@@ -199,11 +165,11 @@ export function renderBadgeSvg(
   <circle cx="46" cy="57" r="30" fill="${avatarBg}" stroke="${borderColor}" stroke-width="1.2"/>
   <text x="46" y="64" text-anchor="middle" font-size="19" font-weight="800" fill="${badgeColor}" letter-spacing="-0.02em" ${ff}>${initials}</text>
 
-  <!-- Contact Info (Right of Avatar) -->
+  <!-- Contact Info -->
   <text x="90" y="31" font-size="16" font-weight="800" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
   <text x="90" y="48" font-size="12.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${roleText}</text>
 
-  <!-- Live Status Box (Multiligne: Title + Subtitle) -->
+  <!-- Live Status Box -->
   <rect x="90" y="58" width="374" height="44" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
 
   <!-- Pulsing dot inside status box -->
@@ -212,15 +178,14 @@ export function renderBadgeSvg(
   </circle>
   <circle cx="108" cy="80" r="4.5" fill="${dotColor}"/>
 
-  <!-- Status Title on Line 1, Full Subtitle on Line 2 -->
+  <!-- Status Title & Subtitle -->
   <text x="124" y="73" font-size="12" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="124" y="90" font-size="11" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
 }
 
 /**
- * Generates dynamic PNG image for email signatures using high-resolution vector rasterization.
- * Produces crisp anti-aliased typography and sharp graphics without pixelation.
+ * Generates dynamic PNG image for email signatures using high-resolution vector rasterization via sharp.
  */
 export async function renderBadgePng(
   avail: AvailabilityResult,
@@ -228,7 +193,6 @@ export async function renderBadgePng(
 ): Promise<Buffer> {
   const svg = renderBadgeSvg(avail, options);
   try {
-    // Sharp convertit directement le SVG en PNG de manière native et fiable
     const pngBuffer = await sharp(Buffer.from(svg))
       .png()
       .toBuffer();
