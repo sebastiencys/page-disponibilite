@@ -5,6 +5,25 @@
 
 import { Resvg } from '@resvg/resvg-js';
 import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
+import { PLUS_JAKARTA_SANS_BOLD_B64, PLUS_JAKARTA_SANS_REGULAR_B64 } from './fonts.ts';
+
+// Fonts are embedded at build-time as base64 strings — no filesystem access needed on serverless
+let cachedFontBuffers: Buffer[] | null = null;
+
+export function getFontBuffers(): Buffer[] {
+  if (cachedFontBuffers !== null && cachedFontBuffers.length > 0) {
+    return cachedFontBuffers;
+  }
+  cachedFontBuffers = [
+    Buffer.from(PLUS_JAKARTA_SANS_BOLD_B64, 'base64'),
+    Buffer.from(PLUS_JAKARTA_SANS_REGULAR_B64, 'base64'),
+  ];
+  return cachedFontBuffers;
+}
+
+export async function ensureFontsLoaded(): Promise<Buffer[]> {
+  return getFontBuffers();
+}
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
 export type BadgeTheme = 'light' | 'dark' | 'transparent';
@@ -200,11 +219,17 @@ export function renderBadgePng(
 ): Buffer {
   const svg = renderBadgeSvg(avail, options);
   try {
+    const fontBuffers = getFontBuffers();
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'zoom', value: 1.5 }, // 1.5x crisp rendering for Retina and high-DPI screens
       textRendering: 2, // geometricPrecision
       shapeRendering: 2, // geometricPrecision
       imageRendering: 0, // optimizeQuality
+      font: {
+        loadSystemFonts: true,
+        fontBuffers: fontBuffers.length > 0 ? fontBuffers : undefined,
+        defaultFontFamily: 'Plus Jakarta Sans',
+      },
     });
     const pngData = resvg.render();
     return Buffer.from(pngData.asPng());
