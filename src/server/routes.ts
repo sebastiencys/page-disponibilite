@@ -16,6 +16,7 @@ import {
 import {
   renderBadgeSvg,
   renderBadgePng,
+  ensureFontsLoaded,
   type BadgeStyle,
   type BadgeTheme,
 } from '../lib/badgeRenderer.ts';
@@ -157,6 +158,7 @@ export async function handleApiRequest(
       serverTimezone
     );
 
+    await ensureFontsLoaded();
     const png = renderBadgePng(avail, {
       style: (query.style as BadgeStyle) || 'pill',
       theme: (query.theme as BadgeTheme) || 'light',
