@@ -10,7 +10,6 @@ import {
 import {
   renderBadgeSvg,
   renderBadgePng,
-  ensureFontsLoaded,
   type BadgeStyle,
   type BadgeTheme,
 } from '../src/lib/badgeRenderer.ts';
@@ -69,7 +68,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // PNG
-  await ensureFontsLoaded();
   const png = await renderBadgePng(avail, { style, theme, name, role, company });
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Content-Length', png.length);
