@@ -12,19 +12,13 @@ import { EmailGuideModal } from './components/EmailGuideModal.tsx';
 import {
   calculateAvailability,
   DEFAULT_SCHEDULE,
+  DEFAULT_PROFILE,
   formatTimeShort,
   type AvailabilityResult,
+  type UserProfile,
 } from './lib/availability.ts';
 
 const LOCAL_STORAGE_KEY = 'dispolive_user_state_v2';
-
-interface UserProfile {
-  name: string;
-  role: string;
-  company: string;
-  email: string;
-  bookingUrl: string;
-}
 
 export default function App() {
   // Check URL params on initial load - default is now 'public'
@@ -40,24 +34,8 @@ export default function App() {
     return 'public';
   });
 
-  // Profile data (name, company, etc.)
-  const [profile, setProfile] = useState<UserProfile>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`${LOCAL_STORAGE_KEY}_profile`);
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {}
-      }
-    }
-    return {
-      name: 'Alexandre Martin',
-      role: 'Consultant & Développeur Web',
-      company: 'Digital Solutions',
-      email: 'alexandre@example.com',
-      bookingUrl: 'https://calendly.com',
-    };
-  });
+  // Profile data (read-only from config/personal.json, refreshed via /api/status)
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
 
   const [icsUrl, setIcsUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -88,6 +66,9 @@ export default function App() {
         if (data.availability) {
           setAvailability(data.availability);
         }
+        if (data.profile) {
+          setProfile(data.profile);
+        }
         if (data.hasEnvCalendar !== undefined) {
           setHasEnvCalendar(data.hasEnvCalendar);
         }
@@ -111,29 +92,10 @@ export default function App() {
     return () => clearInterval(timer);
   }, [fetchServerStatus]);
 
-  // Sync profile to server and localStorage
+  // Persist icsUrl to localStorage
   useEffect(() => {
-    localStorage.setItem(`${LOCAL_STORAGE_KEY}_profile`, JSON.stringify(profile));
     localStorage.setItem(`${LOCAL_STORAGE_KEY}_ics`, icsUrl);
-
-    // Sync to backend so dynamic badge uses profile
-    fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: profile.name,
-        role: profile.role,
-        company: profile.company,
-        email: profile.email,
-        bookingUrl: profile.bookingUrl,
-        icsUrl,
-      }),
-    }).catch(() => {});
-  }, [profile, icsUrl]);
-
-  const handleUpdateProfile = (field: string, value: string) => {
-    setProfile(p => ({ ...p, [field]: value }));
-  };
+  }, [icsUrl]);
 
   const handleSyncIcs = async (url: string) => {
     setIsSyncing(true);
@@ -184,7 +146,6 @@ export default function App() {
           <SignatureStudio
             availability={availability}
             profile={profile}
-            onUpdateProfile={handleUpdateProfile}
             appBaseUrl={appBaseUrl}
           />
         )}

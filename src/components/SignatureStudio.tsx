@@ -19,8 +19,11 @@ import {
   X,
   Info,
   CheckCheck,
+  Lock,
+  FileCode,
+  UserCheck,
 } from 'lucide-react';
-import type { AvailabilityResult } from '../lib/availability.ts';
+import { type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
 import type { BadgeStyle, BadgeTheme } from '../lib/badgeRenderer.ts';
 
 interface SignatureStudioProps {
@@ -32,7 +35,7 @@ interface SignatureStudioProps {
     email: string;
     bookingUrl: string;
   };
-  onUpdateProfile: (field: string, value: string) => void;
+  onUpdateProfile?: (field: string, value: string) => void;
   appBaseUrl: string;
 }
 
@@ -58,7 +61,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   };
 
   // Build the live direct badge URL with all profile parameters
-  const badgeUrl = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || 'Alexandre Martin')}&role=${encodeURIComponent(profile.role || '')}&company=${encodeURIComponent(profile.company || '')}&v=${refreshKey}`;
+  const badgeUrl = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`;
   const publicPageUrl = `${appBaseUrl}?view=public`;
 
   // HTML Signature code with bulletproof email client compatibility (tables + inline CSS)
@@ -72,7 +75,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       ? "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Helvetica, Arial, sans-serif"
       : "Roboto, Arial, sans-serif";
 
-    const badgeSrc = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || 'Alexandre Martin')}&role=${encodeURIComponent(profile.role || '')}&company=${encodeURIComponent(profile.company || '')}`;
+    const badgeSrc = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}`;
 
     // Style 1: Signature Complète (All-in-one banner 480x114)
     if (badgeStyle === 'signature') {
@@ -104,7 +107,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       return `<table cellpadding="0" cellspacing="0" border="0" style="font-family: ${fontFamily}; font-size: 14px; line-height: 1.4; color: #1e293b;">
   <tr>
     <td style="padding-bottom: 6px;">
-      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${profile.name || 'Alexandre Martin'}</span>
+      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${profile.name || DEFAULT_PROFILE.name}</span>
       ${profile.role ? `<br /><span style="font-size: 13px; color: #64748b;">${profile.role}${profile.company ? ` • ${profile.company}` : ''}</span>` : ''}
     </td>
   </tr>
@@ -148,7 +151,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     return `<table cellpadding="0" cellspacing="0" border="0" style="font-family: ${fontFamily}; font-size: 14px; line-height: 1.4; color: #1e293b; max-width: ${imgWidth}px; width: 100%;">
   <tr>
     <td style="padding-bottom: 8px;">
-      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${profile.name || 'Alexandre Martin'}</span>
+      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${profile.name || DEFAULT_PROFILE.name}</span>
       ${profile.role ? `<br /><span style="font-size: 13px; color: #64748b;">${profile.role}${profile.company ? ` • ${profile.company}` : ''}</span>` : ''}
     </td>
   </tr>
@@ -383,62 +386,90 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </div>
           </div>
 
-          {/* Profile Details for the Signature */}
+          {/* Profile Details for the Signature (Read-only from config/personal.json) */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-indigo-600" />
-              Vos Informations Personnelles
-            </h2>
-            <p className="text-xs text-slate-500">
-              Ces informations apparaissent dans la signature générée et sur votre page publique de disponibilité.
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-indigo-600" />
+                  Vos Informations Personnelles
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Identité affichée dans la signature et sur votre page publique de disponibilité.
+                </p>
+              </div>
+
+              {/* JSON Badge */}
+              <div
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-mono font-medium border border-slate-200"
+                title="Configuré dans config/personal.json"
+              >
+                <FileCode className="w-3.5 h-3.5 text-indigo-600" />
+                config/personal.json
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+              <span>
+                Ces informations sont <strong>sécurisées et protégées en lecture seule</strong> dans <code className="text-slate-800 font-mono font-semibold">config/personal.json</code> pour empêcher toute modification par des tiers.
+              </span>
+            </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Nom complet</label>
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={e => onUpdateProfile('name', e.target.value)}
-                  placeholder="Ex: Alexandre Martin"
-                  className="w-full text-xs sm:text-sm px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                />
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Nom complet</label>
+                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 select-all flex items-center justify-between">
+                  <span>{profile.name}</span>
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Poste / Métier</label>
-                  <input
-                    type="text"
-                    value={profile.role}
-                    onChange={e => onUpdateProfile('role', e.target.value)}
-                    placeholder="Ex: Consultant Freelance"
-                    className="w-full text-xs sm:text-sm px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Poste / Métier</label>
+                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 select-all flex items-center justify-between">
+                    <span className="truncate">{profile.role || '—'}</span>
+                    <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Entreprise</label>
-                  <input
-                    type="text"
-                    value={profile.company}
-                    onChange={e => onUpdateProfile('company', e.target.value)}
-                    placeholder="Ex: Acme Corp"
-                    className="w-full text-xs sm:text-sm px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                  />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Entreprise</label>
+                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 select-all flex items-center justify-between">
+                    <span className="truncate">{profile.company || '—'}</span>
+                    <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Lien de prise de rendez-vous (optionnel)
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Adresse e-mail</label>
+                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm font-mono text-slate-700 select-all flex items-center justify-between">
+                  <span className="truncate">{profile.email || '—'}</span>
+                  <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Lien de prise de rendez-vous
                 </label>
-                <input
-                  type="url"
-                  value={profile.bookingUrl}
-                  onChange={e => onUpdateProfile('bookingUrl', e.target.value)}
-                  placeholder="https://calendly.com/votre-nom"
-                  className="w-full text-xs sm:text-sm px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-                />
+                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-700 select-all flex items-center justify-between">
+                  {profile.bookingUrl ? (
+                    <a
+                      href={profile.bookingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:text-indigo-800 truncate underline flex items-center gap-1.5"
+                    >
+                      <span className="truncate">{profile.bookingUrl}</span>
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    </a>
+                  ) : (
+                    <span className="text-slate-400 italic">Non configuré</span>
+                  )}
+                  <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
+                </div>
               </div>
             </div>
           </div>
@@ -907,7 +938,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </p>
             <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[70px]">
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=pill&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || 'Alexandre Martin')}&role=${encodeURIComponent(profile.role || '')}&company=${encodeURIComponent(profile.company || '')}&v=${refreshKey}`}
+                src={`${appBaseUrl}/api/badge.${format}?style=pill&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Pill Moderne"
                 className="max-w-full rounded-full shadow-2xs"
               />
@@ -943,7 +974,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </p>
             <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[120px]">
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=signature&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || 'Alexandre Martin')}&role=${encodeURIComponent(profile.role || '')}&company=${encodeURIComponent(profile.company || '')}&v=${refreshKey}`}
+                src={`${appBaseUrl}/api/badge.${format}?style=signature&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Signature Complète"
                 className="max-w-full rounded-xl shadow-2xs"
               />
@@ -979,7 +1010,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </p>
             <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[110px]">
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=card&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || 'Alexandre Martin')}&role=${encodeURIComponent(profile.role || '')}&company=${encodeURIComponent(profile.company || '')}&v=${refreshKey}`}
+                src={`${appBaseUrl}/api/badge.${format}?style=card&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Carte Compacte"
                 className="max-w-full rounded-xl shadow-2xs"
               />
@@ -1015,7 +1046,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </p>
             <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[60px]">
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=dot&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || 'Alexandre Martin')}&role=${encodeURIComponent(profile.role || '')}&company=${encodeURIComponent(profile.company || '')}&v=${refreshKey}`}
+                src={`${appBaseUrl}/api/badge.${format}?style=dot&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Point Minimaliste"
                 className="w-9 h-9 rounded-full shadow-2xs"
               />

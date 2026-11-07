@@ -34,7 +34,18 @@ export interface CalendarEvent {
   isBusy?: boolean; // true if marks user as busy (default true)
 }
 
-import scheduleJson from '../config/schedule.json';
+import scheduleJson from '../config/schedule.json' with { type: 'json' };
+import personalJson from '../config/personal.json' with { type: 'json' };
+
+export interface UserProfile {
+  name: string;
+  role: string;
+  company: string;
+  email: string;
+  bookingUrl: string;
+}
+
+export const DEFAULT_PROFILE: UserProfile = personalJson as unknown as UserProfile;
 
 export type AvailabilityStatus =
   | 'AVAILABLE'
@@ -268,7 +279,46 @@ export function calculateAvailability(
     }
   }
 
-  // 1. Within working hours: Check if currently in an active calendar appointment
+  const currentDay = zoned.dayOfWeek;
+  const currentMinutes = zoned.hour * 60 + zoned.minute;
+  const daySchedule = schedule.days[currentDay];
+
+  // 1. Check if today is a working day (e.g. weekend or day off)
+  if (!daySchedule || !daySchedule.enabled) {
+    const nextStart = getNextWorkStart(now, schedule, timeZone);
+    return {
+      status: 'OFF_HOURS',
+      state: 'off',
+      badgeColor: '#64748B',
+      dotColor: '#475569',
+      title: 'Hors horaires de travail',
+      subtitle: `Reprise ${nextStart.text}`,
+      isWorkTime: false,
+      nextFreeTime: nextStart.text,
+      nextChangeDate: nextStart.date,
+    };
+  }
+
+  const startMin = parseTimeToMinutes(daySchedule.start);
+  const endMin = parseTimeToMinutes(daySchedule.end);
+
+  // 2. Check if before or after work hours
+  if (currentMinutes < startMin || currentMinutes >= endMin) {
+    const nextStart = getNextWorkStart(now, schedule, timeZone);
+    return {
+      status: 'OFF_HOURS',
+      state: 'off',
+      badgeColor: '#64748B',
+      dotColor: '#475569',
+      title: 'Hors horaires de travail',
+      subtitle: `Reprise ${nextStart.text}`,
+      isWorkTime: false,
+      nextFreeTime: nextStart.text,
+      nextChangeDate: nextStart.date,
+    };
+  }
+
+  // 3. Within working hours: Check if currently in an active calendar appointment
   const bufferMs = (schedule.bufferMinutes || 0) * 60 * 1000;
   const nowMs = now.getTime();
 
@@ -310,44 +360,6 @@ export function calculateAvailability(
       isWorkTime: true,
       nextFreeTime: formatTimeShort(freeTime, timeZone),
       nextChangeDate: freeTime,
-    };
-  }
-  const currentDay = zoned.dayOfWeek;
-  const currentMinutes = zoned.hour * 60 + zoned.minute;
-  const daySchedule = schedule.days[currentDay];
-
-  // 2. Check if today is a working day (e.g. weekend or day off)
-  if (!daySchedule || !daySchedule.enabled) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone);
-    return {
-      status: 'OFF_HOURS',
-      state: 'off',
-      badgeColor: '#64748B',
-      dotColor: '#475569',
-      title: 'Hors horaires de travail',
-      subtitle: `Reprise ${nextStart.text}`,
-      isWorkTime: false,
-      nextFreeTime: nextStart.text,
-      nextChangeDate: nextStart.date,
-    };
-  }
-
-  const startMin = parseTimeToMinutes(daySchedule.start);
-  const endMin = parseTimeToMinutes(daySchedule.end);
-
-  // 3. Check if before or after work hours
-  if (currentMinutes < startMin || currentMinutes >= endMin) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone);
-    return {
-      status: 'OFF_HOURS',
-      state: 'off',
-      badgeColor: '#64748B',
-      dotColor: '#475569',
-      title: 'Hors horaires de travail',
-      subtitle: `Reprise ${nextStart.text}`,
-      isWorkTime: false,
-      nextFreeTime: nextStart.text,
-      nextChangeDate: nextStart.date,
     };
   }
 

@@ -8,6 +8,7 @@ import { parse } from 'node:url';
 import {
   calculateAvailability,
   DEFAULT_SCHEDULE,
+  DEFAULT_PROFILE,
   type ScheduleConfig,
   type CalendarEvent,
   type ManualOverride,
@@ -36,13 +37,13 @@ export interface UserState {
   icsUrl?: string;
 }
 
-// In-memory global state (seeded with realistic demo data for today)
+// In-memory global state (seeded from read-only personal.json & schedule.json)
 export const globalStore: UserState = {
-  name: 'Alexandre Martin',
-  role: 'Consultant & Développeur Web',
-  company: 'Digital Solutions',
-  email: 'alexandre@example.com',
-  bookingUrl: 'https://calendly.com',
+  name: DEFAULT_PROFILE.name,
+  role: DEFAULT_PROFILE.role,
+  company: DEFAULT_PROFILE.company,
+  email: DEFAULT_PROFILE.email,
+  bookingUrl: DEFAULT_PROFILE.bookingUrl,
   schedule: DEFAULT_SCHEDULE,
   override: { type: 'auto' },
   events: [],
@@ -201,16 +202,12 @@ export async function handleApiRequest(
     return true;
   }
 
-  // 4. Sync client state to server store
+  // 4. Sync client state to server store (profile is read-only from personal.json)
   if (pathname === '/api/sync' && req.method === 'POST') {
     try {
       const bodyStr = await readBody(req);
       const data = JSON.parse(bodyStr);
-      if (data.name) globalStore.name = data.name;
-      if (data.role) globalStore.role = data.role;
-      if (data.company) globalStore.company = data.company;
-      if (data.email) globalStore.email = data.email;
-      if (data.bookingUrl) globalStore.bookingUrl = data.bookingUrl;
+      // Profile fields are strictly read-only and loaded from config/personal.json
       // Override is locked to { type: 'auto' } for security & integrity
       globalStore.override = { type: 'auto' };
       if (data.icsUrl !== undefined) globalStore.icsUrl = data.icsUrl;

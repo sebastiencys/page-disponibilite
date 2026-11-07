@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calculateAvailability,
   DEFAULT_SCHEDULE,
+  DEFAULT_PROFILE,
   getNextWorkStart,
   type CalendarEvent,
   type ScheduleConfig,
@@ -130,4 +131,16 @@ test('event scheduled on a weekend or off-hours does not mark user as busy, rema
   assert.equal(result.isWorkTime, false);
   assert.match(result.subtitle, /lundi/i);
 });
+
+test('loads DEFAULT_PROFILE securely from config/personal.json', () => {
+  assert.ok(DEFAULT_PROFILE, 'DEFAULT_PROFILE should exist');
+  assert.equal(typeof DEFAULT_PROFILE.name, 'string');
+  assert.ok(DEFAULT_PROFILE.name.length > 0, 'Name must not be empty');
+  assert.equal(typeof DEFAULT_PROFILE.role, 'string');
+  assert.equal(typeof DEFAULT_PROFILE.company, 'string');
+  assert.equal(typeof DEFAULT_PROFILE.email, 'string');
+  assert.match(DEFAULT_PROFILE.email, /@/, 'Email must be valid format');
+  assert.equal(typeof DEFAULT_PROFILE.bookingUrl, 'string');
+});
+
 

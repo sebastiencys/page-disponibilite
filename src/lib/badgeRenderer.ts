@@ -4,7 +4,7 @@
  */
 
 import { Resvg } from '@resvg/resvg-js';
-import type { AvailabilityResult } from './availability.ts';
+import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
 export type BadgeTheme = 'light' | 'dark' | 'transparent';
@@ -41,9 +41,9 @@ export function renderBadgeSvg(
   const {
     style = 'pill',
     theme = 'light',
-    name = 'Alexandre Martin',
-    role = 'Consultant & Développeur Web',
-    company = 'Digital Solutions',
+    name = DEFAULT_PROFILE.name,
+    role = DEFAULT_PROFILE.role,
+    company = DEFAULT_PROFILE.company,
   } = options;
 
   const isDark = theme === 'dark';

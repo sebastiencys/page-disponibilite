@@ -19,6 +19,26 @@ Ce dépôt est **100% prêt pour Vercel** avec :
 
 ---
 
+## ⚙️ Configuration Sécurisée (Fichiers JSON)
+
+Pour garantir la sécurité et la fiabilité des informations affichées, les réglages clés sont **protégés en lecture seule** dans les fichiers JSON du dossier `config/` :
+
+- **`config/personal.json`** : Vos informations personnelles (nom complet, poste, entreprise, e-mail, lien de prise de rendez-vous Calendly/Cal.com).
+  ```json
+  {
+    "name": "Alexandre Martin",
+    "role": "Consultant & Développeur Web",
+    "company": "Digital Solutions",
+    "email": "alexandre@example.com",
+    "bookingUrl": "https://calendly.com"
+  }
+  ```
+- **`config/schedule.json`** : Vos horaires de travail par jour de la semaine et votre pause déjeuner.
+
+Ces fichiers sont lus automatiquement par l'application et ne peuvent pas être modifiés depuis l'interface web par des tiers.
+
+---
+
 ## 💻 Développement Local
 
 ```bash

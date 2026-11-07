@@ -1,6 +1,6 @@
 import React from 'react';
 import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock } from 'lucide-react';
-import type { AvailabilityResult } from '../lib/availability.ts';
+import { type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
 
 interface HeaderProps {
   currentTab: string;
@@ -36,12 +36,12 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Minimal Profile Brand */}
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                {profileName ? profileName.charAt(0) : 'A'}
+                {profileName ? profileName.charAt(0) : (DEFAULT_PROFILE.name?.charAt(0) || 'A')}
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-900 text-sm sm:text-base tracking-tight">
-                    {profileName || 'Alexandre Martin'}
+                    {profileName || DEFAULT_PROFILE.name}
                   </span>
                   <span className="hidden sm:inline px-2 py-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full">
                     En direct

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   calculateAvailability,
   DEFAULT_SCHEDULE,
+  DEFAULT_PROFILE,
   type ScheduleConfig,
   type CalendarEvent,
   type ManualOverride,
@@ -28,9 +29,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const query = req.query || {};
   const style = (query.style as BadgeStyle) || 'pill';
   const theme = (query.theme as BadgeTheme) || 'light';
-  const name = (query.name as string) || 'Alexandre Martin';
-  const role = (query.role as string) || 'Consultant & Développeur Web';
-  const company = (query.company as string) || 'Digital Solutions';
+  const name = (query.name as string) || DEFAULT_PROFILE.name;
+  const role = (query.role as string) || DEFAULT_PROFILE.role;
+  const company = (query.company as string) || DEFAULT_PROFILE.company;
 
   // Determine format from query, URL or accept header
   let format = (query.format as string)?.toLowerCase();

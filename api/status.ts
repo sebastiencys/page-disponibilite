@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   calculateAvailability,
   DEFAULT_SCHEDULE,
+  DEFAULT_PROFILE,
   type CalendarEvent,
 } from '../src/lib/availability.ts';
 
@@ -25,11 +26,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     timezone,
     availability: avail,
     profile: {
-      name: 'Alexandre Martin',
-      role: 'Consultant & Développeur Web',
-      company: 'Digital Solutions',
-      email: 'alexandre@example.com',
-      bookingUrl: 'https://calendly.com',
+      name: DEFAULT_PROFILE.name,
+      role: DEFAULT_PROFILE.role,
+      company: DEFAULT_PROFILE.company,
+      email: DEFAULT_PROFILE.email,
+      bookingUrl: DEFAULT_PROFILE.bookingUrl,
     },
   });
 }
