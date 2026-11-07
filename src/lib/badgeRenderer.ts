@@ -3,8 +3,95 @@
  * Generates vector SVG and high-resolution anti-aliased PNG images with modern typography.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
+
+let cachedFontBuffers: Buffer[] | null = null;
+
+export function getFontBuffers(): Buffer[] {
+  if (cachedFontBuffers !== null && cachedFontBuffers.length > 0) {
+    return cachedFontBuffers;
+  }
+
+  const buffers: Buffer[] = [];
+  const fontFileNames = ['PlusJakartaSans-Bold.ttf', 'PlusJakartaSans-Regular.ttf'];
+
+  const searchDirs: string[] = [
+    path.join(process.cwd(), 'fonts'),
+    path.join(process.cwd(), 'public', 'fonts'),
+    path.resolve('fonts'),
+    path.resolve('public/fonts'),
+  ];
+
+  try {
+    const currentFile = new URL(import.meta.url).pathname;
+    const cleanFile = process.platform === 'win32' && currentFile.startsWith('/') ? currentFile.slice(1) : currentFile;
+    const moduleDir = path.dirname(cleanFile);
+    searchDirs.push(path.resolve(moduleDir, '../../fonts'));
+    searchDirs.push(path.resolve(moduleDir, '../../../fonts'));
+    searchDirs.push(path.resolve(moduleDir, '../fonts'));
+  } catch {
+    // Ignore URL resolution errors
+  }
+
+  for (const fontName of fontFileNames) {
+    for (const dir of searchDirs) {
+      try {
+        const fullPath = path.join(dir, fontName);
+        if (fs.existsSync(fullPath)) {
+          const buf = fs.readFileSync(fullPath);
+          if (buf && buf.length > 0) {
+            buffers.push(buf);
+            break;
+          }
+        }
+      } catch {
+        // Continue searching
+      }
+    }
+  }
+
+  if (buffers.length > 0) {
+    cachedFontBuffers = buffers;
+  }
+  return buffers;
+}
+
+export async function ensureFontsLoaded(): Promise<Buffer[]> {
+  const current = getFontBuffers();
+  if (current.length > 0) {
+    return current;
+  }
+
+  // Fallback: fetch directly from CDN if disk search didn't find bundled files on serverless
+  try {
+    const urls = [
+      'https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-700-normal.ttf',
+      'https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-400-normal.ttf',
+    ];
+    const fetched = await Promise.all(
+      urls.map(async url => {
+        const res = await fetch(url);
+        if (res.ok) {
+          const ab = await res.arrayBuffer();
+          return Buffer.from(ab);
+        }
+        return null;
+      })
+    );
+    const valid = fetched.filter((b): b is Buffer => b !== null && b.length > 0);
+    if (valid.length > 0) {
+      cachedFontBuffers = valid;
+      return valid;
+    }
+  } catch (err) {
+    console.error('Remote font fallback loading failed:', err);
+  }
+
+  return current;
+}
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
 export type BadgeTheme = 'light' | 'dark' | 'transparent';
@@ -200,11 +287,17 @@ export function renderBadgePng(
 ): Buffer {
   const svg = renderBadgeSvg(avail, options);
   try {
+    const fontBuffers = getFontBuffers();
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'zoom', value: 1.5 }, // 1.5x crisp rendering for Retina and high-DPI screens
       textRendering: 2, // geometricPrecision
       shapeRendering: 2, // geometricPrecision
       imageRendering: 0, // optimizeQuality
+      font: {
+        loadSystemFonts: true,
+        fontBuffers: fontBuffers.length > 0 ? fontBuffers : undefined,
+        defaultFontFamily: 'Plus Jakarta Sans',
+      },
     });
     const pngData = resvg.render();
     return Buffer.from(pngData.asPng());

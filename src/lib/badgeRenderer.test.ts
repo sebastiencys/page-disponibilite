@@ -4,9 +4,9 @@ import { calculateAvailability, DEFAULT_SCHEDULE } from './availability.ts';
 import { renderBadgeSvg, renderBadgePng } from './badgeRenderer.ts';
 
 test('renderBadgeSvg generates valid SVG markup with correct colors', () => {
-  const now = new Date('2026-11-09T10:15:00'); // Available
+  const now = new Date('2026-11-09T10:15:00+01:00'); // Available in Europe/Paris
   const avail = calculateAvailability(now, DEFAULT_SCHEDULE, []);
-  
+
   const svg = renderBadgeSvg(avail, { style: 'pill', theme: 'light' });
   assert.ok(svg.includes('<svg'));
   assert.ok(svg.includes('</svg>'));
@@ -15,13 +15,13 @@ test('renderBadgeSvg generates valid SVG markup with correct colors', () => {
 });
 
 test('renderBadgeSvg supports dot, card, and signature styles', () => {
-  const now = new Date('2026-11-09T14:30:00');
+  const now = new Date('2026-11-09T14:30:00+01:00');
   const avail = calculateAvailability(now, DEFAULT_SCHEDULE, [
     {
       id: '1',
       title: 'Réunion Client',
-      start: '2026-11-09T14:00:00',
-      end: '2026-11-09T15:00:00',
+      start: '2026-11-09T14:00:00+01:00',
+      end: '2026-11-09T15:00:00+01:00',
     },
   ]);
 

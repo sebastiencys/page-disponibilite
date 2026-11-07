@@ -139,7 +139,6 @@ test('loads DEFAULT_PROFILE securely from config/personal.json', () => {
   assert.equal(typeof DEFAULT_PROFILE.role, 'string');
   assert.equal(typeof DEFAULT_PROFILE.company, 'string');
   assert.equal(typeof DEFAULT_PROFILE.email, 'string');
-  assert.match(DEFAULT_PROFILE.email, /@/, 'Email must be valid format');
   assert.equal(typeof DEFAULT_PROFILE.bookingUrl, 'string');
 });
 

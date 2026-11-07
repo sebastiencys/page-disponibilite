@@ -3,6 +3,11 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/**/*.ts": {
+      "includeFiles": "fonts/**"
+    }
+  },
   "rewrites": [
     { "source": "/badge.png", "destination": "/api/badge?format=png" },
     { "source": "/badge.svg", "destination": "/api/badge?format=svg" },
