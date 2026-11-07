@@ -79,16 +79,16 @@ export function renderBadgeSvg(
   const safeRole = escapeXml(role);
   const safeCompany = escapeXml(company);
 
-  // Modern font family stack with Plus Jakarta Sans & native Apple/Windows system fonts
+  // Font family attribute applied directly to each <text> element for maximum compatibility
+  // (resvg does not process CSS @import, and a broken @import can invalidate the entire <style> block)
+  const ff = `font-family="'Plus Jakarta Sans', sans-serif"`;
+
+  // Defs block: Google Fonts @import kept for browser/SVG rendering, separated from font-family
+  // which is now an inline attribute on every <text> element for resvg compatibility
   const fontDef = `
     <defs>
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap');
-        text {
-          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          -webkit-font-smoothing: antialiased;
-          text-rendering: geometricPrecision;
-        }
       </style>
       <filter id="dot-glow" x="-40%" y="-40%" width="180%" height="180%">
         <feGaussianBlur stdDeviation="3" result="blur" />
@@ -135,8 +135,8 @@ export function renderBadgeSvg(
   <circle cx="26" cy="27" r="5.5" fill="${dotColor}" filter="url(#dot-glow)"/>
 
   <!-- Multiline Text: Title on line 1, Subtitle on line 2 -->
-  <text x="48" y="23" font-size="13" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em">${safeTitle}</text>
-  <text x="48" y="39" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em">${safeSubtitle}</text>
+  <text x="48" y="23" font-size="13" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
+  <text x="48" y="39" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
   }
 
@@ -150,8 +150,8 @@ export function renderBadgeSvg(
 
   <!-- Header row: Dot + Name + Right Tag -->
   <circle cx="22" cy="20" r="4.5" fill="${dotColor}"/>
-  <text x="34" y="24" font-size="14.5" font-weight="700" fill="${textPrimary}" letter-spacing="-0.01em">${safeName}</text>
-  <text x="362" y="23" text-anchor="end" font-size="11" font-weight="600" fill="${textSecondary}">Disponibilité en direct</text>
+  <text x="34" y="24" font-size="14.5" font-weight="700" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
+  <text x="362" y="23" text-anchor="end" font-size="11" font-weight="600" fill="${textSecondary}" ${ff}>Disponibilité en direct</text>
 
   <!-- Inner Status Container (Multiligne) -->
   <rect x="14" y="36" width="352" height="50" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
@@ -163,8 +163,8 @@ export function renderBadgeSvg(
   <circle cx="32" cy="61" r="5" fill="${dotColor}"/>
 
   <!-- Status Title (Line 1) & Schedule Subtitle (Line 2) -->
-  <text x="48" y="55" font-size="12.5" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em">${safeTitle}</text>
-  <text x="48" y="73" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em">${safeSubtitle}</text>
+  <text x="48" y="55" font-size="12.5" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
+  <text x="48" y="73" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
   }
 
@@ -188,11 +188,11 @@ export function renderBadgeSvg(
 
   <!-- Avatar circle on Left -->
   <circle cx="46" cy="57" r="30" fill="${avatarBg}" stroke="${borderColor}" stroke-width="1.2"/>
-  <text x="46" y="64" text-anchor="middle" font-size="19" font-weight="800" fill="${badgeColor}" letter-spacing="-0.02em">${initials}</text>
+  <text x="46" y="64" text-anchor="middle" font-size="19" font-weight="800" fill="${badgeColor}" letter-spacing="-0.02em" ${ff}>${initials}</text>
 
   <!-- Contact Info (Right of Avatar) -->
-  <text x="90" y="31" font-size="16" font-weight="800" fill="${textPrimary}" letter-spacing="-0.01em">${safeName}</text>
-  <text x="90" y="48" font-size="12.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em">${roleText}</text>
+  <text x="90" y="31" font-size="16" font-weight="800" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
+  <text x="90" y="48" font-size="12.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${roleText}</text>
 
   <!-- Live Status Box (Multiligne: Title + Subtitle) -->
   <rect x="90" y="58" width="374" height="44" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
@@ -204,8 +204,8 @@ export function renderBadgeSvg(
   <circle cx="108" cy="80" r="4.5" fill="${dotColor}"/>
 
   <!-- Status Title on Line 1, Full Subtitle on Line 2 -->
-  <text x="124" y="73" font-size="12" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em">${safeTitle}</text>
-  <text x="124" y="90" font-size="11" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em">${safeSubtitle}</text>
+  <text x="124" y="73" font-size="12" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
+  <text x="124" y="90" font-size="11" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
 }
 
@@ -226,7 +226,7 @@ export function renderBadgePng(
       shapeRendering: 2, // geometricPrecision
       imageRendering: 0, // optimizeQuality
       font: {
-        loadSystemFonts: true,
+        loadSystemFonts: false,
         fontBuffers: fontBuffers.length > 0 ? fontBuffers : undefined,
         defaultFontFamily: 'Plus Jakarta Sans',
       },

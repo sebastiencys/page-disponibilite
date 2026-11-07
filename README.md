@@ -60,3 +60,8 @@ npm run build
 ## 📧 Intégration dans Gmail / Outlook / Apple Mail
 
 Consultez l'onglet **Générateur de Signature** et **Guide & Astuces** directement dans l'application pour copier en 1 clic votre signature HTML ou le lien direct vers l'image `.png`.
+
+## TODO
+- Cacher le studio derrière un mot de passe (inscrit dans le .env)
+- Afficher la liste des prochains RDV tout en restant secret (pas de nom, pas de participants)
+- Vérifier le libellé "Libre jusqu'à xx H" jusqu'à fin de la journée si pas de RDV prévu
