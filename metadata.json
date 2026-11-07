@@ -1,0 +1,6 @@
+{
+  "name": "DispoLive - Statut & Badge Signature en Temps Réel",
+  "description": "Affichez votre disponibilité en temps réel (vert/rouge) dans votre signature d'e-mail et sur le web en fonction de votre calendrier et de vos horaires de travail.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
