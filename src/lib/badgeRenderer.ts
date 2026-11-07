@@ -3,7 +3,7 @@
  * Generates vector SVG and high-resolution anti-aliased PNG images with modern typography.
  */
 
-import { Resvg } from '@resvg/resvg-js';
+import sharp from 'sharp';
 import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
 import { PLUS_JAKARTA_SANS_BOLD_B64, PLUS_JAKARTA_SANS_REGULAR_B64 } from './fonts.ts';
 
@@ -213,29 +213,20 @@ export function renderBadgeSvg(
  * Generates dynamic PNG image for email signatures using high-resolution vector rasterization.
  * Produces crisp anti-aliased typography and sharp graphics without pixelation.
  */
-export function renderBadgePng(
+export async function renderBadgePng(
   avail: AvailabilityResult,
   options: BadgeOptions = {}
-): Buffer {
+): Promise<Buffer> {
   const svg = renderBadgeSvg(avail, options);
   try {
-    const fontBuffers = getFontBuffers();
-    const resvg = new Resvg(svg, {
-      fitTo: { mode: 'zoom', value: 1.5 }, // 1.5x crisp rendering for Retina and high-DPI screens
-      textRendering: 2, // geometricPrecision
-      shapeRendering: 2, // geometricPrecision
-      imageRendering: 0, // optimizeQuality
-      font: {
-        loadSystemFonts: false,
-        fontBuffers: fontBuffers.length > 0 ? fontBuffers : undefined,
-        defaultFontFamily: 'Plus Jakarta Sans',
-      },
-    });
-    const pngData = resvg.render();
-    return Buffer.from(pngData.asPng());
+    // Sharp convertit directement le SVG en PNG de manière native et fiable
+    const pngBuffer = await sharp(Buffer.from(svg))
+      .png()
+      .toBuffer();
+
+    return pngBuffer;
   } catch (err) {
-    console.error('Resvg PNG rendering fallback triggered:', err);
-    // Return empty fallback PNG if rendering ever throws
+    console.error('Sharp PNG rendering error:', err);
     return Buffer.alloc(0);
   }
 }
