@@ -3,94 +3,26 @@
  * Generates vector SVG and high-resolution anti-aliased PNG images with modern typography.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
+import { PLUS_JAKARTA_SANS_BOLD_B64, PLUS_JAKARTA_SANS_REGULAR_B64 } from './fonts.ts';
 
+// Fonts are embedded at build-time as base64 strings — no filesystem access needed on serverless
 let cachedFontBuffers: Buffer[] | null = null;
 
 export function getFontBuffers(): Buffer[] {
   if (cachedFontBuffers !== null && cachedFontBuffers.length > 0) {
     return cachedFontBuffers;
   }
-
-  const buffers: Buffer[] = [];
-  const fontFileNames = ['PlusJakartaSans-Bold.ttf', 'PlusJakartaSans-Regular.ttf'];
-
-  const searchDirs: string[] = [
-    path.join(process.cwd(), 'fonts'),
-    path.join(process.cwd(), 'public', 'fonts'),
-    path.resolve('fonts'),
-    path.resolve('public/fonts'),
+  cachedFontBuffers = [
+    Buffer.from(PLUS_JAKARTA_SANS_BOLD_B64, 'base64'),
+    Buffer.from(PLUS_JAKARTA_SANS_REGULAR_B64, 'base64'),
   ];
-
-  try {
-    const currentFile = new URL(import.meta.url).pathname;
-    const cleanFile = process.platform === 'win32' && currentFile.startsWith('/') ? currentFile.slice(1) : currentFile;
-    const moduleDir = path.dirname(cleanFile);
-    searchDirs.push(path.resolve(moduleDir, '../../fonts'));
-    searchDirs.push(path.resolve(moduleDir, '../../../fonts'));
-    searchDirs.push(path.resolve(moduleDir, '../fonts'));
-  } catch {
-    // Ignore URL resolution errors
-  }
-
-  for (const fontName of fontFileNames) {
-    for (const dir of searchDirs) {
-      try {
-        const fullPath = path.join(dir, fontName);
-        if (fs.existsSync(fullPath)) {
-          const buf = fs.readFileSync(fullPath);
-          if (buf && buf.length > 0) {
-            buffers.push(buf);
-            break;
-          }
-        }
-      } catch {
-        // Continue searching
-      }
-    }
-  }
-
-  if (buffers.length > 0) {
-    cachedFontBuffers = buffers;
-  }
-  return buffers;
+  return cachedFontBuffers;
 }
 
 export async function ensureFontsLoaded(): Promise<Buffer[]> {
-  const current = getFontBuffers();
-  if (current.length > 0) {
-    return current;
-  }
-
-  // Fallback: fetch directly from CDN if disk search didn't find bundled files on serverless
-  try {
-    const urls = [
-      'https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-700-normal.ttf',
-      'https://cdn.jsdelivr.net/fontsource/fonts/plus-jakarta-sans@latest/latin-400-normal.ttf',
-    ];
-    const fetched = await Promise.all(
-      urls.map(async url => {
-        const res = await fetch(url);
-        if (res.ok) {
-          const ab = await res.arrayBuffer();
-          return Buffer.from(ab);
-        }
-        return null;
-      })
-    );
-    const valid = fetched.filter((b): b is Buffer => b !== null && b.length > 0);
-    if (valid.length > 0) {
-      cachedFontBuffers = valid;
-      return valid;
-    }
-  } catch (err) {
-    console.error('Remote font fallback loading failed:', err);
-  }
-
-  return current;
+  return getFontBuffers();
 }
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
