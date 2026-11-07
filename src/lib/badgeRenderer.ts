@@ -4,24 +4,11 @@
  */
 
 import { Resvg } from '@resvg/resvg-js';
-import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
-import { PLUS_JAKARTA_SANS_REGULAR_B64 } from './fonts.ts';
+import type { AvailabilityResult } from './availability.ts';
 
-// Police unique chargée en mémoire pour garantir la compatibilité stricte avec resvg
-let cachedFontBuffers: Buffer[] | null = null;
-
-export function getFontBuffers(): Buffer[] {
-  if (cachedFontBuffers !== null && cachedFontBuffers.length > 0) {
-    return cachedFontBuffers;
-  }
-  cachedFontBuffers = [
-    Buffer.from(PLUS_JAKARTA_SANS_REGULAR_B64, 'base64'),
-  ];
-  return cachedFontBuffers;
-}
-
-export async function ensureFontsLoaded(): Promise<Buffer[]> {
-  return getFontBuffers();
+// Fonction factice conservée pour la compatibilité avec badge.ts
+export async function ensureFontsLoaded(): Promise<any[]> {
+  return [];
 }
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
@@ -78,7 +65,8 @@ export function renderBadgeSvg(
   const safeRole = escapeXml(role);
   const safeCompany = escapeXml(company);
 
-  const ff = `font-family="Plus Jakarta Sans"`;
+  // DejaVu Sans est nativement présente sur les serveurs Linux de Vercel
+  const ff = `font-family="DejaVu Sans, sans-serif"`;
 
   const fontDef = `
     <defs>
@@ -122,7 +110,7 @@ export function renderBadgeSvg(
     <animate attributeName="opacity" values="0.3;0.08;0.3" dur="2.2s" repeatCount="indefinite" />
   </circle>
   <circle cx="26" cy="27" r="5.5" fill="${dotColor}" filter="url(#dot-glow)"/>
-  <text x="48" y="23" font-size="13" font-weight="normal" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
+  <text x="48" y="23" font-size="13" font-weight="bold" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="48" y="39" font-size="11.5" font-weight="normal" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
   }
@@ -134,14 +122,14 @@ export function renderBadgeSvg(
   ${fontDef}
   <rect x="1" y="1" width="378" height="98" rx="14" fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5"/>
   <circle cx="22" cy="20" r="4.5" fill="${dotColor}"/>
-  <text x="34" y="24" font-size="14.5" font-weight="normal" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
+  <text x="34" y="24" font-size="14.5" font-weight="bold" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
   <text x="362" y="23" text-anchor="end" font-size="11" font-weight="normal" fill="${textSecondary}" ${ff}>Disponibilité en direct</text>
   <rect x="14" y="36" width="352" height="50" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
   <circle cx="32" cy="61" r="10" fill="${badgeColor}" opacity="0.2">
     <animate attributeName="r" values="7;11;7" dur="2s" repeatCount="indefinite" />
   </circle>
   <circle cx="32" cy="61" r="5" fill="${dotColor}"/>
-  <text x="48" y="55" font-size="12.5" font-weight="normal" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
+  <text x="48" y="55" font-size="12.5" font-weight="bold" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="48" y="73" font-size="11.5" font-weight="normal" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
   }
@@ -163,21 +151,21 @@ export function renderBadgeSvg(
   ${fontDef}
   <rect x="1" y="1" width="478" height="112" rx="16" fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5"/>
   <circle cx="46" cy="57" r="30" fill="${avatarBg}" stroke="${borderColor}" stroke-width="1.2"/>
-  <text x="46" y="64" text-anchor="middle" font-size="19" font-weight="normal" fill="${badgeColor}" letter-spacing="-0.02em" ${ff}>${initials}</text>
-  <text x="90" y="31" font-size="16" font-weight="normal" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
+  <text x="46" y="64" text-anchor="middle" font-size="19" font-weight="bold" fill="${badgeColor}" letter-spacing="-0.02em" ${ff}>${initials}</text>
+  <text x="90" y="31" font-size="16" font-weight="bold" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
   <text x="90" y="48" font-size="12.5" font-weight="normal" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${roleText}</text>
   <rect x="90" y="58" width="374" height="44" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
   <circle cx="108" cy="80" r="9" fill="${badgeColor}" opacity="0.25">
     <animate attributeName="r" values="7;11;7" dur="2s" repeatCount="indefinite" />
   </circle>
   <circle cx="108" cy="80" r="4.5" fill="${dotColor}"/>
-  <text x="124" y="73" font-size="12" font-weight="normal" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
+  <text x="124" y="73" font-size="12" font-weight="bold" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="124" y="90" font-size="11" font-weight="normal" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
 }
 
 /**
- * Generates dynamic PNG image for email signatures using high-resolution vector rasterization.
+ * Generates dynamic PNG image for email signatures using resvg.
  */
 export function renderBadgePng(
   avail: AvailabilityResult,
@@ -185,16 +173,13 @@ export function renderBadgePng(
 ): Buffer {
   const svg = renderBadgeSvg(avail, options);
   try {
-    const fontBuffers = getFontBuffers();
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'zoom', value: 1.5 },
       textRendering: 2,
       shapeRendering: 2,
       imageRendering: 0,
       font: {
-        loadSystemFonts: false,
-        fontBuffers: fontBuffers,
-        defaultFontFamily: 'Plus Jakarta Sans',
+        loadSystemFonts: true, // Indispensable pour que resvg trouve DejaVu Sans sur le serveur Linux
       },
     });
     const pngData = resvg.render();
