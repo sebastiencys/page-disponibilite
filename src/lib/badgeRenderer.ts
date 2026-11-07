@@ -6,6 +6,11 @@
 import { Resvg } from '@resvg/resvg-js';
 import type { AvailabilityResult } from './availability.ts';
 
+// Fonction exportée pour satisfaire l'import dans routes.ts ou badge.ts
+export async function ensureFontsLoaded(): Promise<any[]> {
+  return [];
+}
+
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
 export type BadgeTheme = 'light' | 'dark' | 'transparent';
 
@@ -60,7 +65,7 @@ export function renderBadgeSvg(
   const safeRole = escapeXml(role);
   const safeCompany = escapeXml(company);
 
-  // Police système Linux universelle présente sur Vercel (Liberation Sans / DejaVu Sans)
+  // Police système Linux universelle présente sur Vercel
   const ff = `font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif"`;
 
   const fontDef = `
@@ -99,17 +104,12 @@ export function renderBadgeSvg(
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="54" viewBox="0 0 400 54" fill="none">
   ${fontDef}
-  <!-- Pill Container -->
   <rect x="1" y="1" width="398" height="52" rx="26" fill="url(#cardBgGrad)" stroke="${borderColor}" stroke-width="1.5"/>
-
-  <!-- Left Pulsing Aura & Status Dot -->
   <circle cx="26" cy="27" r="12" fill="${badgeColor}" opacity="0.22">
     <animate attributeName="r" values="9;14;9" dur="2.2s" repeatCount="indefinite" />
     <animate attributeName="opacity" values="0.3;0.08;0.3" dur="2.2s" repeatCount="indefinite" />
   </circle>
   <circle cx="26" cy="27" r="5.5" fill="${dotColor}" filter="url(#dot-glow)"/>
-
-  <!-- Multiline Text -->
   <text x="48" y="23" font-size="13" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="48" y="39" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
@@ -120,24 +120,15 @@ export function renderBadgeSvg(
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="380" height="100" viewBox="0 0 380 100" fill="none">
   ${fontDef}
-  <!-- Outer Card -->
   <rect x="1" y="1" width="378" height="98" rx="14" fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5"/>
-
-  <!-- Header row -->
   <circle cx="22" cy="20" r="4.5" fill="${dotColor}"/>
   <text x="34" y="24" font-size="14.5" font-weight="700" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
   <text x="362" y="23" text-anchor="end" font-size="11" font-weight="600" fill="${textSecondary}" ${ff}>Disponibilité en direct</text>
-
-  <!-- Inner Status Container -->
   <rect x="14" y="36" width="352" height="50" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
-
-  <!-- Status Dot inside container -->
   <circle cx="32" cy="61" r="10" fill="${badgeColor}" opacity="0.2">
     <animate attributeName="r" values="7;11;7" dur="2s" repeatCount="indefinite" />
   </circle>
   <circle cx="32" cy="61" r="5" fill="${dotColor}"/>
-
-  <!-- Status Title & Subtitle -->
   <text x="48" y="55" font-size="12.5" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="48" y="73" font-size="11.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
@@ -158,27 +149,16 @@ export function renderBadgeSvg(
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="114" viewBox="0 0 480 114" fill="none">
   ${fontDef}
-  <!-- Outer Card -->
   <rect x="1" y="1" width="478" height="112" rx="16" fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5"/>
-
-  <!-- Avatar circle on Left -->
   <circle cx="46" cy="57" r="30" fill="${avatarBg}" stroke="${borderColor}" stroke-width="1.2"/>
   <text x="46" y="64" text-anchor="middle" font-size="19" font-weight="800" fill="${badgeColor}" letter-spacing="-0.02em" ${ff}>${initials}</text>
-
-  <!-- Contact Info -->
   <text x="90" y="31" font-size="16" font-weight="800" fill="${textPrimary}" letter-spacing="-0.01em" ${ff}>${safeName}</text>
   <text x="90" y="48" font-size="12.5" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${roleText}</text>
-
-  <!-- Live Status Box -->
   <rect x="90" y="58" width="374" height="44" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
-
-  <!-- Pulsing dot inside status box -->
   <circle cx="108" cy="80" r="9" fill="${badgeColor}" opacity="0.25">
     <animate attributeName="r" values="7;11;7" dur="2s" repeatCount="indefinite" />
   </circle>
   <circle cx="108" cy="80" r="4.5" fill="${dotColor}"/>
-
-  <!-- Status Title & Subtitle -->
   <text x="124" y="73" font-size="12" font-weight="700" fill="${badgeColor}" letter-spacing="-0.01em" ${ff}>${safeTitle}</text>
   <text x="124" y="90" font-size="11" font-weight="500" fill="${textSecondary}" letter-spacing="-0.01em" ${ff}>${safeSubtitle}</text>
 </svg>`;
@@ -199,7 +179,7 @@ export function renderBadgePng(
       shapeRendering: 2,
       imageRendering: 0,
       font: {
-        loadSystemFonts: true, // Autorise resvg à utiliser les polices système Linux du serveur Vercel
+        loadSystemFonts: true,
       },
     });
     const pngData = resvg.render();
