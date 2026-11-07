@@ -81,14 +81,23 @@ export function renderBadgeSvg(
 
   // Font family attribute applied directly to each <text> element for maximum compatibility
   // (resvg does not process CSS @import, and a broken @import can invalidate the entire <style> block)
-  const ff = `font-family="Arial, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"`;
+  const ff = `font-family="Plus Jakarta Sans"`;
 
   // Defs block: Google Fonts @import kept for browser/SVG rendering, separated from font-family
   // which is now an inline attribute on every <text> element for resvg compatibility
   const fontDef = `
     <defs>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap');
+        @font-face {
+          font-family: 'Plus Jakarta Sans';
+          src: url(data:font/ttf;base64,${PLUS_JAKARTA_SANS_REGULAR_B64}) format('truetype');
+          font-weight: 500;
+        }
+        @font-face {
+          font-family: 'Plus Jakarta Sans';
+          src: url(data:font/ttf;base64,${PLUS_JAKARTA_SANS_BOLD_B64}) format('truetype');
+          font-weight: 750;
+        }
       </style>
       <filter id="dot-glow" x="-40%" y="-40%" width="180%" height="180%">
         <feGaussianBlur stdDeviation="3" result="blur" />
