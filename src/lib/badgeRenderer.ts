@@ -81,7 +81,7 @@ export function renderBadgeSvg(
 
   // Font family attribute applied directly to each <text> element for maximum compatibility
   // (resvg does not process CSS @import, and a broken @import can invalidate the entire <style> block)
-  const ff = `font-family="'Plus Jakarta Sans', sans-serif"`;
+  const ff = `font-family="Plus Jakarta Sans"`;
 
   // Defs block: Google Fonts @import kept for browser/SVG rendering, separated from font-family
   // which is now an inline attribute on every <text> element for resvg compatibility
