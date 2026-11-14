@@ -21,7 +21,18 @@ test('detects off-hours on weekend (Sunday)', () => {
   assert.equal(result.status, 'OFF_HOURS');
   assert.equal(result.state, 'off');
   assert.equal(result.isWorkTime, false);
-  assert.match(result.subtitle, /Demain|lundi/i);
+  assert.match(result.subtitle, /lundi à 09h00/i);
+});
+
+test('displays explicit day name instead of "Demain" on weekday evenings (e.g. Monday evening -> mardi)', () => {
+  // Monday 20:30 Paris
+  const mondayEvening = parisDate('2026-11-09T20:30:00');
+  const result = calculateAvailability(mondayEvening, DEFAULT_SCHEDULE, []);
+  assert.equal(result.status, 'OFF_HOURS');
+  assert.equal(result.state, 'off');
+  assert.equal(result.isWorkTime, false);
+  assert.equal(result.subtitle, 'Reprise mardi à 09h00');
+  assert.ok(!result.subtitle.includes('Demain'), 'Should not use "Demain"');
 });
 
 test('detects off-hours before workday begins on Monday', () => {

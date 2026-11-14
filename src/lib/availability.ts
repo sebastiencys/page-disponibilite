@@ -224,7 +224,7 @@ export function getNextWorkStart(
     if (dayConfig && dayConfig.enabled) {
       const nextDate = new Date(now);
       nextDate.setDate(now.getDate() + offset);
-      const dayLabel = offset === 1 ? 'Demain' : DAY_NAMES_FR[nextDayIndex];
+      const dayLabel = DAY_NAMES_FR[nextDayIndex];
       return {
         date: nextDate,
         text: `${dayLabel} à ${dayConfig.start.replace(':', 'h')}`,
