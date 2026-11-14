@@ -17,6 +17,7 @@ import {
   formatTimeShort,
   type AvailabilityResult,
   type UserProfile,
+  type AnonymizedSlot,
 } from './lib/availability.ts';
 
 const LOCAL_STORAGE_KEY = 'dispolive_user_state_v2';
@@ -48,6 +49,7 @@ export default function App() {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasEnvCalendar, setHasEnvCalendar] = useState(false);
+  const [upcomingSlots, setUpcomingSlots] = useState<AnonymizedSlot[]>([]);
   const [now, setNow] = useState(new Date());
   const [timezone, setTimezone] = useState<string>(DEFAULT_SCHEDULE.timezone || 'Europe/Paris');
 
@@ -70,6 +72,9 @@ export default function App() {
         }
         if (data.profile) {
           setProfile(data.profile);
+        }
+        if (data.upcomingSlots) {
+          setUpcomingSlots(data.upcomingSlots);
         }
         if (data.hasEnvCalendar !== undefined) {
           setHasEnvCalendar(data.hasEnvCalendar);
@@ -181,6 +186,7 @@ export default function App() {
             availability={availability}
             schedule={DEFAULT_SCHEDULE}
             timezone={timezone}
+            upcomingSlots={upcomingSlots}
             onGoToStudio={() => setCurrentTab('signature')}
           />
         )}

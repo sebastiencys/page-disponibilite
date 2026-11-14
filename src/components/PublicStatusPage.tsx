@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Calendar,
   Clock,
@@ -9,13 +9,18 @@ import {
   Coffee,
   Moon,
   Sparkles,
+  Lock,
+  ShieldCheck,
+  CalendarCheck,
 } from 'lucide-react';
 import {
   calculateAvailability,
   getZonedDateParts,
+  formatTimeShort,
   type AvailabilityResult,
   type ScheduleConfig,
   type DayOfWeek,
+  type AnonymizedSlot,
 } from '../lib/availability.ts';
 
 interface PublicStatusPageProps {
@@ -29,6 +34,7 @@ interface PublicStatusPageProps {
   availability: AvailabilityResult;
   schedule: ScheduleConfig;
   timezone?: string;
+  upcomingSlots?: AnonymizedSlot[];
   onGoToStudio?: () => void;
 }
 
@@ -47,6 +53,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   availability,
   schedule,
   timezone = schedule.timezone || 'Europe/Paris',
+  upcomingSlots = [],
   onGoToStudio,
 }) => {
   const getStatusIcon = () => {
@@ -61,6 +68,61 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         return <Moon className="w-8 h-8 text-slate-400" />;
     }
   };
+
+  // Group slots by day for clear and structured reading
+  const groupedSlots = useMemo(() => {
+    if (!upcomingSlots || upcomingSlots.length === 0) return [];
+
+    const nowZoned = getZonedDateParts(new Date(), timezone);
+    const groups: {
+      dateKey: string;
+      dayLabel: string;
+      slots: { startStr: string; endStr: string; durationStr: string }[];
+    }[] = [];
+
+    for (const slot of upcomingSlots) {
+      const start = new Date(slot.start);
+      const end = new Date(slot.end);
+      const startParts = getZonedDateParts(start, timezone);
+      const dateKey = `${startParts.year}-${startParts.month}-${startParts.day}`;
+
+      let dayLabel = `${DAY_LABELS[startParts.dayOfWeek]} ${startParts.day}/${startParts.month}`;
+      if (
+        startParts.year === nowZoned.year &&
+        startParts.month === nowZoned.month &&
+        startParts.day === nowZoned.day
+      ) {
+        dayLabel = "Aujourd'hui";
+      } else {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowParts = getZonedDateParts(tomorrow, timezone);
+        if (
+          startParts.year === tomorrowParts.year &&
+          startParts.month === tomorrowParts.month &&
+          startParts.day === tomorrowParts.day
+        ) {
+          dayLabel = `Demain (${DAY_LABELS[startParts.dayOfWeek]})`;
+        }
+      }
+
+      const startStr = formatTimeShort(start, timezone);
+      const endStr = formatTimeShort(end, timezone);
+      const diffMins = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
+      const hours = Math.floor(diffMins / 60);
+      const mins = diffMins % 60;
+      const durationStr = hours > 0 ? (mins > 0 ? `${hours}h${mins}` : `${hours}h`) : `${mins} min`;
+
+      let group = groups.find(g => g.dateKey === dateKey);
+      if (!group) {
+        group = { dateKey, dayLabel, slots: [] };
+        groups.push(group);
+      }
+      group.slots.push({ startStr, endStr, durationStr });
+    }
+
+    return groups;
+  }, [upcomingSlots, timezone]);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-16">
@@ -141,6 +203,70 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               Lui envoyer un e-mail
             </a>
           )}
+        </div>
+      </div>
+
+      {/* Upcoming Busy Slots Section (Privacy-Safe) */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <CalendarCheck className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-base font-bold text-slate-900">
+              Prochains créneaux occupés
+            </h2>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+            <Lock className="w-3 h-3 text-slate-400" />
+            <span>Agenda confidentiel • Motifs masqués</span>
+          </span>
+        </div>
+
+        {groupedSlots.length > 0 ? (
+          <div className="space-y-4 pt-1">
+            {groupedSlots.map(group => (
+              <div key={group.dateKey} className="space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <span>{group.dayLabel}</span>
+                  <span className="h-px bg-slate-100 flex-1" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {group.slots.map((slot, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:bg-slate-100/60 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-2xs" />
+                        <div>
+                          <span className="text-xs font-bold font-mono text-slate-800">
+                            {slot.startStr} - {slot.endStr}
+                          </span>
+                          <span className="block text-[11px] text-slate-500">
+                            Créneau réservé
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                        {slot.durationStr}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-6 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-500 space-y-1">
+            <p className="font-semibold text-slate-700">Aucun créneau occupé prévu prochainement</p>
+            <p className="text-slate-400">Les créneaux de travail habituels sont entièrement disponibles.</p>
+          </div>
+        )}
+
+        <div className="pt-2 text-[11px] text-slate-400 flex items-center gap-1.5 border-t border-slate-100">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+          <span>
+            Les détails des rendez-vous (intitulés, participants et lieux) restent strictement confidentiels et ne sont jamais divulgués.
+          </span>
         </div>
       </div>
 

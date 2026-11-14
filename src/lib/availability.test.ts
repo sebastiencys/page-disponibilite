@@ -7,8 +7,10 @@ import {
   getNextWorkStart,
   createDateInTimezone,
   getZonedDateParts,
+  getAnonymizedUpcomingSlots,
   type CalendarEvent,
   type ScheduleConfig,
+  type AnonymizedSlot,
 } from './availability.ts';
 
 // Helper to specify exact wall-clock time in Europe/Paris (CET = UTC+1 in November)
@@ -171,6 +173,58 @@ test('createDateInTimezone constructs precise wall-clock time in any timezone', 
   assert.equal(reunionParts.day, 16);
   assert.equal(reunionParts.hour, 8);
   assert.equal(reunionParts.minute, 15);
+});
+
+test('getAnonymizedUpcomingSlots strips all secret details and merges overlapping slots', () => {
+  const events: CalendarEvent[] = [
+    {
+      id: 'secret-1',
+      title: 'CONFIDENTIEL: Réunion stratégique avec M. Untel',
+      start: '2026-11-16T10:00:00.000Z',
+      end: '2026-11-16T11:00:00.000Z',
+      isBusy: true,
+    },
+    {
+      id: 'secret-2',
+      title: 'CONFIDENTIEL: Entretien d embauche',
+      start: '2026-11-16T11:00:00.000Z',
+      end: '2026-11-16T12:00:00.000Z',
+      isBusy: true,
+    },
+    {
+      id: 'transparent-3',
+      title: 'Rappel perso non bloquant',
+      start: '2026-11-16T13:00:00.000Z',
+      end: '2026-11-16T14:00:00.000Z',
+      isBusy: false,
+    },
+    {
+      id: 'past-4',
+      title: 'Réunion passée',
+      start: '2026-11-16T07:00:00.000Z',
+      end: '2026-11-16T08:00:00.000Z',
+      isBusy: true,
+    },
+  ];
+
+  const fromDate = new Date('2026-11-16T09:00:00.000Z');
+  const slots = getAnonymizedUpcomingSlots(events, fromDate);
+
+  // Past event (07:00-08:00) must be excluded
+  // Transparent non-busy event must be excluded
+  // Two consecutive meetings (10:00-11:00 and 11:00-12:00) must be merged into 10:00-12:00
+  assert.equal(slots.length, 1);
+  assert.equal(slots[0].start, '2026-11-16T10:00:00.000Z');
+  assert.equal(slots[0].end, '2026-11-16T12:00:00.000Z');
+  assert.equal(slots[0].label, 'Créneau réservé');
+
+  // Verify that NO private fields exist on the result object
+  const slotObj = slots[0] as any;
+  assert.equal(slotObj.id, undefined);
+  assert.equal(slotObj.title, undefined);
+  assert.equal(slotObj.description, undefined);
+  assert.equal(slotObj.participants, undefined);
+  assert.equal(slotObj.location, undefined);
 });
 
 

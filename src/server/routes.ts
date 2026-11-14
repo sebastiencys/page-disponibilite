@@ -7,6 +7,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parse } from 'node:url';
 import {
   calculateAvailability,
+  getAnonymizedUpcomingSlots,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type ScheduleConfig,
@@ -191,6 +192,7 @@ export async function handleApiRequest(
       globalStore.override,
       serverTimezone
     );
+    const upcomingSlots = getAnonymizedUpcomingSlots(currentEvents, now, 8);
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
@@ -201,6 +203,7 @@ export async function handleApiRequest(
         timezone: serverTimezone,
         availability: avail,
         hasEnvCalendar: hasEnvCalendar(),
+        upcomingSlots,
         profile: {
           name: globalStore.name,
           role: globalStore.role,

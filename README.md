@@ -71,6 +71,14 @@ Un onglet dédié **Simulateur** (ou accessible via `?view=simulator`) permet de
 
 ---
 
+## 🔒 Affichage sécurisé des prochains rendez-vous
+
+Sur la page publique, la section **Prochains créneaux occupés** présente les plages horaires réservées de manière strictement anonymisée :
+- **Confidentialité totale** : aucun titre, aucun participant, aucun lieu ni aucune description ne sont transmis au navigateur.
+- **Fusion intelligente** des créneaux contigus ou qui se chevauchent.
+- **Groupement par jour** avec indication de la durée du créneau.
+
+---
+
 ## TODO
 - Cacher le studio derrière un mot de passe (inscrit dans le .env)
-- Afficher la liste des prochains RDV tout en restant secret (pas de nom, pas de participants)

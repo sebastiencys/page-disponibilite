@@ -75,6 +75,12 @@ export interface AvailabilityResult {
   nextChangeDate?: Date;
 }
 
+export interface AnonymizedSlot {
+  start: string; // ISO string
+  end: string;   // ISO string
+  label: string; // "Créneau réservé"
+}
+
 export const DEFAULT_SCHEDULE: ScheduleConfig = scheduleJson as unknown as ScheduleConfig;
 
 function parseTimeToMinutes(timeStr: string): number {
@@ -449,4 +455,48 @@ export function calculateAvailability(
     nextFreeTime: 'Maintenant',
     nextChangeDate,
   };
+}
+
+/**
+ * Returns a privacy-safe, anonymized list of upcoming busy slots.
+ * Strips all personal details (titles, descriptions, locations, participants)
+ * and merges contiguous or overlapping meetings.
+ */
+export function getAnonymizedUpcomingSlots(
+  events: CalendarEvent[],
+  fromDate: Date = new Date(),
+  maxSlots = 8
+): AnonymizedSlot[] {
+  const fromMs = fromDate.getTime();
+
+  const validEvents = events
+    .filter(evt => {
+      if (evt.isBusy === false) return false;
+      const endMs = new Date(evt.end).getTime();
+      return !isNaN(endMs) && endMs > fromMs;
+    })
+    .map(evt => {
+      const startMs = Math.max(new Date(evt.start).getTime(), fromMs);
+      const endMs = new Date(evt.end).getTime();
+      return { startMs, endMs };
+    })
+    .sort((a, b) => a.startMs - b.startMs);
+
+  if (validEvents.length === 0) return [];
+
+  const merged: { startMs: number; endMs: number }[] = [];
+  for (const slot of validEvents) {
+    const last = merged[merged.length - 1];
+    if (last && slot.startMs <= last.endMs) {
+      last.endMs = Math.max(last.endMs, slot.endMs);
+    } else {
+      merged.push({ startMs: slot.startMs, endMs: slot.endMs });
+    }
+  }
+
+  return merged.slice(0, maxSlots).map(slot => ({
+    start: new Date(slot.startMs).toISOString(),
+    end: new Date(slot.endMs).toISOString(),
+    label: 'Créneau réservé',
+  }));
 }
