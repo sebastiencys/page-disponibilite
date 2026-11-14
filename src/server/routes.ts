@@ -125,6 +125,10 @@ export async function handleApiRequest(
   // 1. Dynamic SVG Badge
   if (pathname === '/api/badge.svg' || pathname === '/badge.svg') {
     let now = new Date();
+    if (query.time && typeof query.time === 'string') {
+      const parsed = new Date(query.time);
+      if (!isNaN(parsed.getTime())) now = parsed;
+    }
 
     const currentEvents = await resolveCurrentEvents();
     const avail = calculateAvailability(
@@ -140,6 +144,7 @@ export async function handleApiRequest(
       theme: (query.theme as BadgeTheme) || 'light',
       name: (query.name as string) || globalStore.name,
       role: (query.role as string) || globalStore.role,
+      company: (query.company as string) || globalStore.company,
     });
 
     serveSvg(res, svg);
@@ -149,6 +154,10 @@ export async function handleApiRequest(
   // 2. Dynamic PNG Badge
   if (pathname === '/api/badge.png' || pathname === '/badge.png') {
     let now = new Date();
+    if (query.time && typeof query.time === 'string') {
+      const parsed = new Date(query.time);
+      if (!isNaN(parsed.getTime())) now = parsed;
+    }
     const currentEvents = await resolveCurrentEvents();
     const avail = calculateAvailability(
       now,

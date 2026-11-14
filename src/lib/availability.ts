@@ -170,6 +170,26 @@ export function formatTimeShort(date: Date, timeZone: string = 'Europe/Paris'): 
   return `${h}h${m}`;
 }
 
+/**
+ * Creates a Date object representing the specified date and time in the target timezone.
+ * @param dateStr "YYYY-MM-DD"
+ * @param timeStr "HH:mm"
+ * @param timeZone target timezone (e.g. "Europe/Paris" or "Indian/Reunion")
+ */
+export function createDateInTimezone(
+  dateStr: string,
+  timeStr: string,
+  timeZone: string = 'Europe/Paris'
+): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  const utcGuess = new Date(Date.UTC(year, (month || 1) - 1, day || 1, hour || 0, minute || 0));
+  const parts = getZonedDateParts(utcGuess, timeZone);
+  const asTz = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute));
+  const diffMs = asTz.getTime() - utcGuess.getTime();
+  return new Date(utcGuess.getTime() - diffMs);
+}
+
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
 /**

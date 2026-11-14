@@ -42,7 +42,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else format = 'png'; // default to PNG for email signatures
   }
 
-  const now = new Date();
+  let now = new Date();
+  if (query.time && typeof query.time === 'string') {
+    const parsedTime = new Date(query.time);
+    if (!isNaN(parsedTime.getTime())) {
+      now = parsedTime;
+    }
+  }
   let schedule = DEFAULT_SCHEDULE;
   let events = defaultEvents;
   let override: ManualOverride = { type: 'auto' };

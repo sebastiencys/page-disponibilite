@@ -9,6 +9,7 @@ import { SignatureStudio } from './components/SignatureStudio.tsx';
 import { CalendarSchedule } from './components/CalendarSchedule.tsx';
 import { PublicStatusPage } from './components/PublicStatusPage.tsx';
 import { EmailGuideModal } from './components/EmailGuideModal.tsx';
+import { AvailabilitySimulator } from './components/AvailabilitySimulator.tsx';
 import {
   calculateAvailability,
   DEFAULT_SCHEDULE,
@@ -27,6 +28,7 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view');
       if (view === 'studio' || view === 'signature') return 'signature';
+      if (view === 'simulator' || view === 'simulation') return 'simulator';
       if (view === 'schedule') return 'schedule';
       if (view === 'guide') return 'guide';
       if (view === 'public') return 'public';
@@ -147,6 +149,17 @@ export default function App() {
             availability={availability}
             profile={profile}
             appBaseUrl={appBaseUrl}
+            onGoToSimulator={() => setCurrentTab('simulator')}
+          />
+        )}
+
+        {currentTab === 'simulator' && (
+          <AvailabilitySimulator
+            schedule={DEFAULT_SCHEDULE}
+            profile={profile}
+            timezone={timezone}
+            appBaseUrl={appBaseUrl}
+            onGoToStudio={() => setCurrentTab('signature')}
           />
         )}
 

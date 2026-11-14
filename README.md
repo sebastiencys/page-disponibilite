@@ -61,8 +61,17 @@ npm run build
 
 Consultez l'onglet **Générateur de Signature** et **Guide & Astuces** directement dans l'application pour copier en 1 clic votre signature HTML ou le lien direct vers l'image `.png`.
 
+## 🧪 Simulateur de Disponibilité
+
+Un onglet dédié **Simulateur** (ou accessible via `?view=simulator`) permet de choisir n'importe quelle date et heure de la semaine pour observer en direct le comportement des 4 variantes de badge :
+- **Sélecteur de date et heure** avec curseur interactif 24h.
+- **Raccourcis en 1 clic** (Matinée de travail, Pause déjeuner, Soirée/Nuit, Week-end, Lundi matin, Maintenant).
+- **Prévisualisation instantanée des 4 variantes** (Pill, Signature Complète, Carte Compacte, Point Minimaliste) avec bascule thème clair / sombre.
+- **Support API `?time=ISO_DATE`** : permet de générer des badges PNG ou SVG pour un instant T spécifique via `/api/badge.png?time=...` ou `/api/badge.svg?time=...`.
+
+---
+
 ## TODO
 - Cacher le studio derrière un mot de passe (inscrit dans le .env)
 - Afficher la liste des prochains RDV tout en restant secret (pas de nom, pas de participants)
 - Vérifier le libellé "Libre jusqu'à xx H" jusqu'à fin de la journée si pas de RDV prévu
-- Ajouter un simulateur où l'on choisit la date et l'heure et il nous présente le badge prévu

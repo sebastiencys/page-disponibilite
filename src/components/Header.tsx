@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock } from 'lucide-react';
+import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock, Sliders } from 'lucide-react';
 import { type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
 
 interface HeaderProps {
@@ -24,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const tabs = [
     { id: 'signature', label: 'Générateur de Signature', icon: Sparkles },
+    { id: 'simulator', label: 'Simulateur', icon: Sliders },
     { id: 'schedule', label: 'Horaires & Agenda', icon: Calendar },
     { id: 'guide', label: 'Guide & Astuces', icon: HelpCircle },
   ];

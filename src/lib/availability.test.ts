@@ -5,6 +5,8 @@ import {
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   getNextWorkStart,
+  createDateInTimezone,
+  getZonedDateParts,
   type CalendarEvent,
   type ScheduleConfig,
 } from './availability.ts';
@@ -140,6 +142,24 @@ test('loads DEFAULT_PROFILE securely from config/personal.json', () => {
   assert.equal(typeof DEFAULT_PROFILE.company, 'string');
   assert.equal(typeof DEFAULT_PROFILE.email, 'string');
   assert.equal(typeof DEFAULT_PROFILE.bookingUrl, 'string');
+});
+
+test('createDateInTimezone constructs precise wall-clock time in any timezone', () => {
+  const parisDate = createDateInTimezone('2026-11-16', '14:30', 'Europe/Paris');
+  const parisParts = getZonedDateParts(parisDate, 'Europe/Paris');
+  assert.equal(parisParts.year, 2026);
+  assert.equal(parisParts.month, 11);
+  assert.equal(parisParts.day, 16);
+  assert.equal(parisParts.hour, 14);
+  assert.equal(parisParts.minute, 30);
+
+  const reunionDate = createDateInTimezone('2026-11-16', '08:15', 'Indian/Reunion');
+  const reunionParts = getZonedDateParts(reunionDate, 'Indian/Reunion');
+  assert.equal(reunionParts.year, 2026);
+  assert.equal(reunionParts.month, 11);
+  assert.equal(reunionParts.day, 16);
+  assert.equal(reunionParts.hour, 8);
+  assert.equal(reunionParts.minute, 15);
 });
 
 

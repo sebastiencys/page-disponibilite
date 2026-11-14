@@ -37,6 +37,7 @@ interface SignatureStudioProps {
   };
   onUpdateProfile?: (field: string, value: string) => void;
   appBaseUrl: string;
+  onGoToSimulator?: () => void;
 }
 
 export const SignatureStudio: React.FC<SignatureStudioProps> = ({
@@ -44,6 +45,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   profile,
   onUpdateProfile,
   appBaseUrl,
+  onGoToSimulator,
 }) => {
   const [badgeStyle, setBadgeStyle] = useState<BadgeStyle>('pill');
   const [badgeTheme, setBadgeTheme] = useState<BadgeTheme>('light');
@@ -909,8 +911,21 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               Observez les différences de structure, de dimensions et d'intégration entre les 4 formats d'images générés :
             </p>
           </div>
-          <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg w-fit">
-            Format actuel : <strong className="text-indigo-600">{format.toUpperCase()}</strong> ({emailClientTab.toUpperCase()})
+          <div className="flex items-center gap-2">
+            <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg w-fit">
+              Format actuel : <strong className="text-indigo-600">{format.toUpperCase()}</strong> ({emailClientTab.toUpperCase()})
+            </div>
+            {onGoToSimulator && (
+              <button
+                type="button"
+                onClick={onGoToSimulator}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition-colors cursor-pointer"
+                title="Simuler une date et heure spécifique pour voir les badges prévus"
+              >
+                <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Ouvrir le simulateur de date & heure</span>
+              </button>
+            )}
           </div>
         </div>
 
