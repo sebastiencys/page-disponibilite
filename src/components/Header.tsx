@@ -140,9 +140,6 @@ export const Header: React.FC<HeaderProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">DispoLive</span>
-                <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/70 rounded-full">
-                  Studio
-                </span>
               </div>
             </div>
           </div>
