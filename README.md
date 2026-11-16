@@ -93,10 +93,10 @@ Définissez vos plages de travail, votre fuseau de repli et votre pause déjeune
 1. **Événements du calendrier `.ics` (priorité absolue)** : Les réunions et rendez-vous issus de `CALENDAR_ICS_URL` (y compris les séries récurrentes `RRULE`, `RDATE`, `EXDATE`, `RECURRENCE-ID`) priment toujours sur tout le reste :
    - Une réunion qui chevauche la pause déjeuner affiche le statut **En réunion** (et non *Pause déjeuner*).
    - Une réunion planifiée en dehors des horaires/jours de travail affiche également **En réunion**.
-   - Les événements « toute la journée » sont automatiquement alignés sur les horaires des jours travaillés configurés dans `days` (et ignorés les jours où `enabled: false`).
+   - Les événements « toute la journée » sont automatiquement alignés sur les horaires configurés dans `days` pour chaque jour concerné (**y compris si ce jour a `enabled: false`** : la réunion reste alors affichée dans les créneaux occupés et prioritaire sur « Hors horaires »).
 2. **Horaires de travail** : Si le jour est désactivé ou en dehors de `start`–`end`, le statut passe en **Hors horaires**.
 3. **Pause déjeuner** : Si l'heure courante entre dans la pause déjeuner effective du jour (surcharge `lunchBreak.days[jour]` ou horaire global), le statut passe en **Pause déjeuner**.
-4. **Disponible** : Sinon, le badge passe au vert (**Disponible**).
+4. **Disponible & Reprise intelligente** : Sinon, le badge passe au vert (**Disponible**). Lorsqu'un événement toute la journée ou une plage hors horaires bloque la reprise, l'indication **Reprise …** saute automatiquement les jours fériés/off et les journées entièrement occupées pour afficher le vrai moment de disponibilité suivante.
 
 ---
 

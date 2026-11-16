@@ -79,7 +79,7 @@ END:VCALENDAR`;
   assert.equal(formatTimeShort(new Date(events[0].end), 'Indian/Reunion'), '15h30');
 });
 
-test('parseIcsEvents parses all-day events and aligns them with working hours on 23/11', () => {
+test('parseIcsEvents parses all-day events and aligns them with configured day hours even if day is disabled', () => {
   const ics = `BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -96,11 +96,19 @@ END:VCALENDAR`;
   assert.equal(events[0].allDayStartDate, '2026-11-23');
   assert.equal(events[0].allDayEndDate, '2026-11-24');
 
+  const scheduleMonDisabled = {
+    ...DEFAULT_SCHEDULE,
+    days: {
+      ...DEFAULT_SCHEDULE.days,
+      1: { enabled: false, start: '08:30', end: '17:30' },
+    },
+  };
+
   const fromDate = createDateInTimezone('2026-11-22', '10:00', 'Indian/Reunion');
-  const slots = getAnonymizedUpcomingSlots(events, fromDate, 8, DEFAULT_SCHEDULE, 'Indian/Reunion');
+  const slots = getAnonymizedUpcomingSlots(events, fromDate, 8, scheduleMonDisabled, 'Indian/Reunion');
   assert.equal(slots.length, 1);
-  assert.equal(formatTimeShort(new Date(slots[0].start), 'Indian/Reunion'), '09h00');
-  assert.equal(formatTimeShort(new Date(slots[0].end), 'Indian/Reunion'), '18h00');
+  assert.equal(formatTimeShort(new Date(slots[0].start), 'Indian/Reunion'), '08h30');
+  assert.equal(formatTimeShort(new Date(slots[0].end), 'Indian/Reunion'), '17h30');
 });
 
 test('parseIcsEvents parses standard VEVENT blocks and respects TRANSP/STATUS/CDO-BUSYSTATUS', () => {

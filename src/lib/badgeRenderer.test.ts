@@ -1,11 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateAvailability, DEFAULT_SCHEDULE } from './availability.ts';
+import { calculateAvailability, type ScheduleConfig } from './availability.ts';
 import { renderBadgeSvg, renderBadgePng } from './badgeRenderer.ts';
+
+const TEST_SCHEDULE: ScheduleConfig = {
+  timezone: 'Europe/Paris',
+  days: {
+    1: { enabled: true, start: '09:00', end: '18:00' },
+    2: { enabled: true, start: '09:00', end: '18:00' },
+    3: { enabled: true, start: '09:00', end: '18:00' },
+    4: { enabled: true, start: '09:00', end: '18:00' },
+    5: { enabled: true, start: '09:00', end: '17:30' },
+    6: { enabled: false, start: '09:00', end: '18:00' },
+    0: { enabled: false, start: '09:00', end: '18:00' },
+  },
+  lunchBreak: {
+    enabled: true,
+    start: '12:30',
+    end: '13:30',
+    label: 'Pause déjeuner',
+  },
+  bufferMinutes: 0,
+};
 
 test('renderBadgeSvg generates valid SVG markup with correct colors', () => {
   const now = new Date('2026-11-09T10:15:00+01:00'); // Available in Europe/Paris
-  const avail = calculateAvailability(now, DEFAULT_SCHEDULE, []);
+  const avail = calculateAvailability(now, TEST_SCHEDULE, []);
 
   const svg = renderBadgeSvg(avail, { style: 'pill', theme: 'light' });
   assert.ok(svg.includes('<svg'));
@@ -16,7 +36,7 @@ test('renderBadgeSvg generates valid SVG markup with correct colors', () => {
 
 test('renderBadgeSvg supports dot, card, and signature styles', () => {
   const now = new Date('2026-11-09T14:30:00+01:00');
-  const avail = calculateAvailability(now, DEFAULT_SCHEDULE, [
+  const avail = calculateAvailability(now, TEST_SCHEDULE, [
     {
       id: '1',
       title: 'Réunion Client',
@@ -38,7 +58,7 @@ test('renderBadgeSvg supports dot, card, and signature styles', () => {
 
 test('renderBadgePng generates valid PNG binary buffer with correct magic bytes', () => {
   const now = new Date('2026-11-09T10:15:00');
-  const avail = calculateAvailability(now, DEFAULT_SCHEDULE, []);
+  const avail = calculateAvailability(now, TEST_SCHEDULE, []);
 
   const pngBuf = renderBadgePng(avail, { style: 'pill' });
   assert.ok(Buffer.isBuffer(pngBuf));
@@ -59,7 +79,7 @@ test('renderBadgePng generates valid PNG binary buffer with correct magic bytes'
 
 test('renderBadgePng produces distinct outputs for pill, card, signature, and dot styles', () => {
   const now = new Date('2026-11-09T10:15:00');
-  const avail = calculateAvailability(now, DEFAULT_SCHEDULE, []);
+  const avail = calculateAvailability(now, TEST_SCHEDULE, []);
 
   const dotPng = renderBadgePng(avail, { style: 'dot' });
   const pillPng = renderBadgePng(avail, { style: 'pill' });

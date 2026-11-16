@@ -290,7 +290,8 @@ function addDaysToDateStr(dateStr: string, days: number): string {
 }
 
 /**
- * Expands all-day events onto working days using each working day's configured start/end hours.
+ * Expands all-day events onto each covered day using that day's configured start/end hours,
+ * even when that day is normally marked `enabled: false` in schedule.days.
  * Timed events are preserved verbatim so meetings outside work hours are still respected.
  */
 export function normalizeEventsForSchedule(
@@ -327,9 +328,11 @@ export function normalizeEventsForSchedule(
     while (curDate < endDateRaw && guard < 90) {
       const dayOfWeek = new Date(`${curDate}T12:00:00Z`).getUTCDay() as DayOfWeek;
       const daySchedule = schedule.days[dayOfWeek];
-      if (daySchedule && daySchedule.enabled) {
-        const slotStart = createDateInTimezone(curDate, daySchedule.start, timeZone);
-        const slotEnd = createDateInTimezone(curDate, daySchedule.end, timeZone);
+      const dayStart = daySchedule?.start?.trim() || '09:00';
+      const dayEnd = daySchedule?.end?.trim() || '18:00';
+      const slotStart = createDateInTimezone(curDate, dayStart, timeZone);
+      const slotEnd = createDateInTimezone(curDate, dayEnd, timeZone);
+      if (slotEnd.getTime() > slotStart.getTime()) {
         normalized.push({
           ...evt,
           id: `${evt.id}_${curDate}`,
@@ -349,46 +352,95 @@ export function normalizeEventsForSchedule(
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
 /**
- * Finds the next working start time from a given reference date
+ * Finds the next truly available working moment from a given reference date,
+ * skipping disabled days, lunch breaks, and scheduled busy calendar events.
  */
 export function getNextWorkStart(
   now: Date,
   schedule: ScheduleConfig,
-  timeZone: string = schedule.timezone || 'Europe/Paris'
+  timeZone: string = schedule.timezone || 'Europe/Paris',
+  events: CalendarEvent[] = [],
+  preNormalizedSortedEvents?: Array<CalendarEvent & { startDate: Date; endDate: Date }>
 ): { date: Date; text: string } {
-  const zoned = getZonedDateParts(now, timeZone);
-  const currentDay = zoned.dayOfWeek;
-  const currentMinutes = zoned.hour * 60 + zoned.minute;
+  const bufferMs = (schedule.bufferMinutes || 0) * 60 * 1000;
+  const sortedEvents =
+    preNormalizedSortedEvents ??
+    normalizeEventsForSchedule(events, schedule, timeZone)
+      .filter(e => e.isBusy !== false)
+      .map(e => ({
+        ...e,
+        startDate: new Date(e.start),
+        endDate: new Date(e.end),
+      }))
+      .filter(e => !isNaN(e.startDate.getTime()) && !isNaN(e.endDate.getTime()))
+      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
 
-  // Check today later
-  const todaySchedule = schedule.days[currentDay];
-  if (todaySchedule && todaySchedule.enabled) {
-    const todayStartMin = parseTimeToMinutes(todaySchedule.start);
-    if (currentMinutes < todayStartMin) {
-      const nextDate = new Date(now);
-      return {
-        date: nextDate,
-        text: `Aujourd'hui à ${todaySchedule.start.replace(':', 'h')}`,
-      };
+  const nowMs = now.getTime();
+  const zonedNow = getZonedDateParts(now, timeZone);
+  const todayDateStr = `${zonedNow.year}-${String(zonedNow.month).padStart(2, '0')}-${String(zonedNow.day).padStart(2, '0')}`;
+
+  for (let offset = 0; offset <= 60; offset++) {
+    const dateStr = offset === 0 ? todayDateStr : addDaysToDateStr(todayDateStr, offset);
+    const dayOfWeek = new Date(`${dateStr}T12:00:00Z`).getUTCDay() as DayOfWeek;
+    const dayConfig = schedule.days[dayOfWeek];
+    if (!dayConfig || !dayConfig.enabled) {
+      continue;
+    }
+
+    const workStartMs = createDateInTimezone(dateStr, dayConfig.start, timeZone).getTime();
+    const workEndMs = createDateInTimezone(dateStr, dayConfig.end, timeZone).getTime();
+    const candidateStartMs = offset === 0 ? Math.max(workStartMs, nowMs) : workStartMs;
+    if (candidateStartMs >= workEndMs) {
+      continue;
+    }
+
+    const blockers: Array<{ start: number; end: number }> = [];
+
+    for (const evt of sortedEvents) {
+      const bStart = evt.startDate.getTime() - bufferMs;
+      const bEnd = evt.endDate.getTime() + bufferMs;
+      if (bEnd > candidateStartMs && bStart < workEndMs) {
+        blockers.push({ start: bStart, end: bEnd });
+      }
+    }
+
+    const effectiveLunch = getEffectiveLunchBreak(schedule, dayOfWeek);
+    if (effectiveLunch.enabled) {
+      const lunchStartMs = createDateInTimezone(dateStr, effectiveLunch.start, timeZone).getTime();
+      const lunchEndMs = createDateInTimezone(dateStr, effectiveLunch.end, timeZone).getTime();
+      if (lunchEndMs > lunchStartMs && lunchEndMs > candidateStartMs && lunchStartMs < workEndMs) {
+        blockers.push({ start: lunchStartMs, end: lunchEndMs });
+      }
+    }
+
+    blockers.sort((a, b) => a.start - b.start);
+
+    let cursor = candidateStartMs;
+    for (const block of blockers) {
+      if (block.end <= cursor) continue;
+      if (block.start > cursor) break;
+      cursor = Math.max(cursor, block.end);
+    }
+
+    if (cursor < workEndMs) {
+      const foundDate = new Date(cursor);
+      const timeStr = formatTimeShort(foundDate, timeZone);
+      const dayLabel = DAY_NAMES_FR[dayOfWeek];
+
+      let text: string;
+      if (offset === 0) {
+        text = `Aujourd'hui à ${timeStr}`;
+      } else if (offset <= 6) {
+        text = `${dayLabel} à ${timeStr}`;
+      } else {
+        const fp = getZonedDateParts(foundDate, timeZone);
+        text = `${dayLabel} ${String(fp.day).padStart(2, '0')}/${String(fp.month).padStart(2, '0')} à ${timeStr}`;
+      }
+
+      return { date: foundDate, text };
     }
   }
 
-  // Look ahead up to 7 days
-  for (let offset = 1; offset <= 7; offset++) {
-    const nextDayIndex = ((currentDay + offset) % 7) as DayOfWeek;
-    const dayConfig = schedule.days[nextDayIndex];
-    if (dayConfig && dayConfig.enabled) {
-      const nextDate = new Date(now);
-      nextDate.setDate(now.getDate() + offset);
-      const dayLabel = DAY_NAMES_FR[nextDayIndex];
-      return {
-        date: nextDate,
-        text: `${dayLabel} à ${dayConfig.start.replace(':', 'h')}`,
-      };
-    }
-  }
-
-  // Fallback
   return { date: now, text: 'Bientôt' };
 }
 
@@ -489,6 +541,21 @@ export function calculateAvailability(
       }
     }
 
+    if (currentEvent.isAllDay) {
+      const nextStart = getNextWorkStart(freeTime, schedule, timeZone, [], sortedEvents);
+      return {
+        status: 'BUSY',
+        state: 'busy',
+        badgeColor: '#EF4444',
+        dotColor: '#DC2626',
+        title: 'En réunion / Occupé',
+        subtitle: `Reprise ${nextStart.text}`,
+        isWorkTime: true,
+        nextFreeTime: nextStart.text,
+        nextChangeDate: nextStart.date,
+      };
+    }
+
     return {
       status: 'BUSY',
       state: 'busy',
@@ -508,7 +575,7 @@ export function calculateAvailability(
 
   // 2. Check if today is a working day (e.g. weekend or day off)
   if (!daySchedule || !daySchedule.enabled) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone);
+    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents);
     return {
       status: 'OFF_HOURS',
       state: 'off',
@@ -527,7 +594,7 @@ export function calculateAvailability(
 
   // 3. Check if before or after work hours
   if (currentMinutes < startMin || currentMinutes >= endMin) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone);
+    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents);
     return {
       status: 'OFF_HOURS',
       state: 'off',
@@ -591,7 +658,7 @@ export function calculateAvailability(
     if (isToday) {
       const lunchStart = effectiveLunch.enabled ? parseTimeToMinutes(effectiveLunch.start) : 9999;
       const lunchEnd = effectiveLunch.enabled ? parseTimeToMinutes(effectiveLunch.end) : -1;
-      if (eventMinutes < lunchStart || currentMinutes >= lunchEnd) {
+      if (eventMinutes < endMin && (eventMinutes < lunchStart || currentMinutes >= lunchEnd)) {
         availableUntilText = `Jusqu'à ${eventTimeStr}`;
         nextChangeDate = nextEvent.startDate;
       }
