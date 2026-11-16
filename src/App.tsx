@@ -24,6 +24,7 @@ import {
 
 const LOCAL_STORAGE_KEY = 'dispolive_user_state_v2';
 const STUDIO_TOKEN_KEY = 'dispolive_studio_token_v1';
+const THEME_STORAGE_KEY = 'dispolive_theme_v1';
 
 export default function App() {
   // Check URL params / path on initial load - default is 'public'
@@ -52,6 +53,26 @@ export default function App() {
     }
     return '';
   });
+
+  // App theme state ('light' | 'dark'), initialized from localStorage or system preference
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === 'dark') return true;
+      if (saved === 'light') return false;
+      return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', isDark);
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
+    }
+  }, [isDark]);
 
   // Profile data (read-only from config/personal.json, refreshed via /api/status)
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
@@ -217,7 +238,7 @@ export default function App() {
   const studioLocked = authLoading || (passwordRequired && !isStudioAuthenticated);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors">
       {/* Navigation Header */}
       <Header
         currentTab={currentTab}
@@ -229,6 +250,8 @@ export default function App() {
         studioLocked={studioLocked}
         passwordRequired={passwordRequired}
         onLockStudio={handleLockStudio}
+        isDark={isDark}
+        onToggleTheme={() => setIsDark(d => !d)}
       />
 
       {/* Main Content Area */}
@@ -245,7 +268,7 @@ export default function App() {
         )}
 
         {isStudioRoute && authLoading && (
-          <div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-400">
+          <div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">
             Vérification de l&apos;accès...
           </div>
         )}
@@ -260,10 +283,10 @@ export default function App() {
         {isStudioRoute && !authLoading && (!passwordRequired || isStudioAuthenticated) && (
           <>
             {!passwordRequired && (
-              <div className="mb-6 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center gap-2.5">
-                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              <div className="mb-6 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2.5">
+                <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>
-                  Aucun mot de passe défini : ajoutez <code className="font-mono font-bold bg-amber-100 px-1 py-0.5 rounded">STUDIO_PASSWORD</code> dans votre fichier <code className="font-mono">.env</code> (ou variables d&apos;environnement) pour verrouiller le Studio.
+                  Aucun mot de passe défini : ajoutez <code className="font-mono font-bold bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded">STUDIO_PASSWORD</code> dans votre fichier <code className="font-mono">.env</code> (ou variables d&apos;environnement) pour verrouiller le Studio.
                 </span>
               </div>
             )}

@@ -128,10 +128,10 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-16">
       {/* Hero Live Status Card */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-10 shadow-lg text-center relative overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 sm:p-10 shadow-lg dark:shadow-none text-center relative overflow-hidden">
         {/* Subtle background glow */}
         <div
-          className="absolute inset-0 opacity-10 pointer-events-none blur-3xl"
+          className="absolute inset-0 opacity-10 dark:opacity-15 pointer-events-none blur-3xl"
           style={{ backgroundColor: availability.badgeColor }}
         />
 
@@ -155,18 +155,18 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         </div>
 
         {/* User Identity */}
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">
           {profile.name}
         </h1>
-        <p className="text-sm text-slate-500 mt-1 font-medium">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
           {profile.role} {profile.company && `• ${profile.company}`}
         </p>
 
         {/* Large Status Badge Pill */}
-        <div className="mt-6 inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full border shadow-xs"
+        <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-2.5 px-5 py-2.5 rounded-full border shadow-xs"
           style={{
             borderColor: `${availability.badgeColor}40`,
-            backgroundColor: `${availability.badgeColor}10`,
+            backgroundColor: `${availability.badgeColor}14`,
           }}
         >
           <span
@@ -176,7 +176,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           <span className="text-base font-bold" style={{ color: availability.badgeColor }}>
             {availability.title}
           </span>
-          <span className="text-sm text-slate-600 font-medium">
+          <span className="text-sm text-slate-600 dark:text-slate-300 font-medium">
             • {availability.subtitle}
           </span>
         </div>
@@ -188,7 +188,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               href={profile.bookingUrl}
               target="_blank"
               rel="noreferrer"
-              className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-100 flex items-center justify-center gap-2 transition-all"
+              className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all"
             >
               <Calendar className="w-4 h-4" />
               Réserver un créneau dans mon agenda
@@ -198,7 +198,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           {profile.email && (
             <a
               href={`mailto:${profile.email}`}
-              className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+              className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
             >
               <Mail className="w-4 h-4" />
               Lui envoyer un e-mail
@@ -208,15 +208,15 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
       </div>
 
       {/* Upcoming Busy Slots Section (Privacy-Safe) */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <CalendarCheck className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-base font-bold text-slate-900">
+            <CalendarCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
               Prochains créneaux occupés
             </h2>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
             <Lock className="w-3 h-3 text-slate-400" />
             <span>Agenda confidentiel • Motifs masqués</span>
           </span>
@@ -226,28 +226,28 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           <div className="space-y-4 pt-1">
             {groupedSlots.map(group => (
               <div key={group.dateKey} className="space-y-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   <span>{group.dayLabel}</span>
-                  <span className="h-px bg-slate-100 flex-1" />
+                  <span className="h-px bg-slate-100 dark:bg-slate-800 flex-1" />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {group.slots.map((slot, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80 hover:bg-slate-100/60 transition-colors"
+                      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 hover:bg-slate-100/60 dark:hover:bg-slate-800 transition-colors"
                     >
                       <div className="flex items-center gap-2.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-2xs" />
                         <div>
-                          <span className="text-xs font-bold font-mono text-slate-800">
+                          <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-100">
                             {slot.startStr} - {slot.endStr}
                           </span>
-                          <span className="block text-[11px] text-slate-500">
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">
                             Créneau réservé
                           </span>
                         </div>
                       </div>
-                      <span className="text-[11px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                      <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                         {slot.durationStr}
                       </span>
                     </div>
@@ -257,13 +257,13 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             ))}
           </div>
         ) : (
-          <div className="py-6 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-500 space-y-1">
-            <p className="font-semibold text-slate-700">Aucun créneau occupé prévu prochainement</p>
-            <p className="text-slate-400">Les créneaux de travail habituels sont entièrement disponibles.</p>
+          <div className="py-6 px-4 text-center rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1">
+            <p className="font-semibold text-slate-700 dark:text-slate-200">Aucun créneau occupé prévu prochainement</p>
+            <p className="text-slate-400 dark:text-slate-500">Les créneaux de travail habituels sont entièrement disponibles.</p>
           </div>
         )}
 
-        <div className="pt-2 text-[11px] text-slate-400 flex items-center gap-1.5 border-t border-slate-100">
+        <div className="pt-2 text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 border-t border-slate-100 dark:border-slate-800">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
           <span>
             Les détails des rendez-vous (intitulés, participants et lieux) restent strictement confidentiels et ne sont jamais divulgués.
@@ -272,17 +272,17 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
       </div>
 
       {/* Working Hours Weekly Grid */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-indigo-600" />
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             Horaires habituels de travail
           </h2>
-          <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md w-fit">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md w-fit">
             Fuseau : {timezone}
           </span>
         </div>
-        <div className="divide-y divide-slate-100 text-xs sm:text-sm">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs sm:text-sm">
           {([1, 2, 3, 4, 5, 6, 0] as DayOfWeek[]).map(day => {
             const conf = schedule.days[day];
             const zonedNow = getZonedDateParts(new Date(), timezone);
@@ -292,7 +292,9 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               <div
                 key={day}
                 className={`flex items-center justify-between py-2.5 px-3 rounded-lg ${
-                  isToday ? 'bg-indigo-50/70 font-semibold text-indigo-950' : 'text-slate-700'
+                  isToday
+                    ? 'bg-indigo-50/70 dark:bg-indigo-950/50 font-semibold text-indigo-950 dark:text-indigo-100'
+                    : 'text-slate-700 dark:text-slate-300'
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -305,11 +307,11 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                 </div>
                 <div>
                   {conf.enabled ? (
-                    <span className="font-mono text-slate-600">
+                    <span className={`font-mono ${isToday ? 'text-indigo-950 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-300'}`}>
                       {conf.start.replace(':', 'h')} - {conf.end.replace(':', 'h')}
                     </span>
                   ) : (
-                    <span className="text-slate-400 italic">Fermé / Repos</span>
+                    <span className="text-slate-400 dark:text-slate-500 italic">Fermé / Repos</span>
                   )}
                 </div>
               </div>
@@ -327,24 +329,24 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           if (!schedule.lunchBreak.enabled && customDays.length === 0) return null;
 
           return (
-            <div className="pt-2 text-xs text-slate-500 space-y-1 border-t border-slate-100">
+            <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 space-y-1 border-t border-slate-100 dark:border-slate-800">
               {schedule.lunchBreak.enabled && (
                 <div className="flex items-center gap-1.5">
                   <Coffee className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   <span>
                     {schedule.lunchBreak.label} :{' '}
-                    <strong className="font-medium text-slate-700">
+                    <strong className="font-medium text-slate-700 dark:text-slate-200">
                       {schedule.lunchBreak.start.replace(':', 'h')} - {schedule.lunchBreak.end.replace(':', 'h')}
                     </strong>
                   </span>
                 </div>
               )}
               {customDays.length > 0 && (
-                <div className="pl-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                <div className="pl-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                   {customDays.map(({ day, eff }) => (
                     <span key={day}>
                       {DAY_LABELS[day]} :{' '}
-                      <strong className="font-medium text-slate-700">
+                      <strong className="font-medium text-slate-700 dark:text-slate-200">
                         {eff.enabled ? `${eff.start.replace(':', 'h')} - ${eff.end.replace(':', 'h')}` : 'Aucune'}
                       </strong>
                     </span>
@@ -361,7 +363,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         <div className="text-center pt-4">
           <button
             onClick={onGoToStudio}
-            className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-600 font-medium transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 font-medium transition-colors cursor-pointer"
             title="Accès protégé au Studio"
           >
             <Lock className="w-3 h-3" />

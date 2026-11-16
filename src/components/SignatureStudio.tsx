@@ -220,15 +220,15 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
         {/* Left: Customization Controls */}
         <div className="lg:col-span-5 space-y-6">
           {/* Badge Options */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Palette className="w-5 h-5 text-indigo-600" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Palette className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 Style & Format du Badge
               </h2>
               <button
                 onClick={() => setRefreshKey(k => k + 1)}
-                className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium cursor-pointer"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center gap-1 font-medium cursor-pointer"
                 title="Rafraîchir le rendu"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -238,11 +238,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
             {/* Badge Style Selector */}
             <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              <div className="flex items-center justify-between mb-2.5 gap-2">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                   Style de la pastille
                 </label>
-                <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/70">
                   {badgeStyle === 'pill' && '400 × 54 px • Capsule 2 Lignes'}
                   {badgeStyle === 'signature' && '480 × 114 px • Tout-en-un'}
                   {badgeStyle === 'card' && '380 × 100 px • Widget 2 Lignes'}
@@ -289,20 +289,20 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     onClick={() => setBadgeStyle(s.id as BadgeStyle)}
                     className={`p-3 text-left rounded-xl border text-xs transition-all cursor-pointer relative overflow-hidden ${
                       badgeStyle === s.id
-                        ? 'border-indigo-600 bg-indigo-50/80 text-indigo-950 font-semibold ring-2 ring-indigo-500/30 shadow-xs'
-                        : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                        ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/80 dark:bg-indigo-950/50 text-indigo-950 dark:text-indigo-100 font-semibold ring-2 ring-indigo-500/30 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-slate-900">{s.label}</span>
-                      <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{s.label}</span>
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded shrink-0">
                         {s.badge}
                       </span>
                     </div>
-                    <div className="text-[11px] text-slate-500 mt-1 font-normal leading-tight">{s.desc}</div>
-                    <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-normal leading-tight">{s.desc}</div>
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
                       <span>Dimensions :</span>
-                      <span className="font-mono font-semibold text-slate-600">{s.size}</span>
+                      <span className="font-mono font-semibold text-slate-600 dark:text-slate-300">{s.size}</span>
                     </div>
                   </button>
                 ))}
@@ -312,11 +312,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             {/* Format: PNG vs SVG */}
             <div>
               <div className="flex items-center justify-between mb-2.5">
-                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                   Format d'image recommandé
                 </label>
                 {emailClientTab === 'outlook' && (
-                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800/70">
                     PNG requis pour Outlook
                   </span>
                 )}
@@ -326,16 +326,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   onClick={() => setFormat('png')}
                   className={`flex items-start gap-3 p-3 rounded-xl border text-left cursor-pointer transition-all ${
                     format === 'png'
-                      ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20'
-                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                      ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 text-indigo-950 dark:text-indigo-100 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0">
                     PNG
                   </div>
                   <div>
                     <div className="text-xs font-bold">Format PNG</div>
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
                       Recommandé pour Outlook, Gmail & tous clients
                     </div>
                   </div>
@@ -345,16 +345,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   onClick={() => setFormat('svg')}
                   className={`flex items-start gap-3 p-3 rounded-xl border text-left cursor-pointer transition-all ${
                     format === 'svg'
-                      ? 'border-indigo-600 bg-indigo-50/70 text-indigo-950 ring-2 ring-indigo-500/20'
-                      : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                      ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/50 text-indigo-950 dark:text-indigo-100 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200'
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-xs shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 flex items-center justify-center font-bold text-xs shrink-0">
                     SVG
                   </div>
                   <div>
                     <div className="text-xs font-bold">Format SVG</div>
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
                       Vectoriel Retina avec halo lumineux animé
                     </div>
                   </div>
@@ -364,7 +364,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
             {/* Theme Picker */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
                 Thème de fond
               </label>
               <div className="flex gap-2">
@@ -377,8 +377,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     onClick={() => setBadgeTheme(t.id as BadgeTheme)}
                     className={`flex-1 py-2 px-3 text-xs rounded-lg border font-medium cursor-pointer transition-all ${
                       badgeTheme === t.id
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-slate-200 bg-white hover:bg-slate-100 text-slate-700'
+                        ? 'border-slate-900 dark:border-indigo-500 bg-slate-900 dark:bg-indigo-600 text-white'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
                     }`}
                   >
                     {t.label}
@@ -389,39 +389,39 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
           </div>
 
           {/* Profile Details for the Signature (Read-only from config/personal.json) */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between gap-2">
               <div>
-                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                   Vos Informations Personnelles
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Identité affichée dans la signature et sur votre page publique de disponibilité.
                 </p>
               </div>
 
               {/* JSON Badge */}
               <div
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-mono font-medium border border-slate-200"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-medium border border-slate-200 dark:border-slate-700 shrink-0"
                 title="Configuré dans config/personal.json"
               >
-                <FileCode className="w-3.5 h-3.5 text-indigo-600" />
+                <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                 config/personal.json
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-center gap-2">
-              <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
               <span>
-                Ces informations sont <strong>sécurisées et protégées en lecture seule</strong> dans <code className="text-slate-800 font-mono font-semibold">config/personal.json</code> pour empêcher toute modification par des tiers.
+                Ces informations sont <strong>sécurisées et protégées en lecture seule</strong> dans <code className="text-slate-800 dark:text-slate-100 font-mono font-semibold">config/personal.json</code> pour empêcher toute modification par des tiers.
               </span>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Nom complet</label>
-                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 select-all flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Nom complet</label>
+                <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 select-all flex items-center justify-between">
                   <span>{profile.name}</span>
                   <Lock className="w-3.5 h-3.5 text-slate-400" />
                 </div>
@@ -429,15 +429,15 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Poste / Métier</label>
-                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 select-all flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Poste / Métier</label>
+                  <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-800 dark:text-slate-200 select-all flex items-center justify-between">
                     <span className="truncate">{profile.role || '—'}</span>
                     <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Entreprise</label>
-                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-800 select-all flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Entreprise</label>
+                  <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-800 dark:text-slate-200 select-all flex items-center justify-between">
                     <span className="truncate">{profile.company || '—'}</span>
                     <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   </div>
@@ -445,30 +445,30 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Adresse e-mail</label>
-                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm font-mono text-slate-700 select-all flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Adresse e-mail</label>
+                <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-mono text-slate-700 dark:text-slate-200 select-all flex items-center justify-between">
                   <span className="truncate">{profile.email || '—'}</span>
                   <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
                   Lien de prise de rendez-vous
                 </label>
-                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-700 select-all flex items-center justify-between">
+                <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-700 dark:text-slate-200 select-all flex items-center justify-between">
                   {profile.bookingUrl ? (
                     <a
                       href={profile.bookingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-indigo-600 hover:text-indigo-800 truncate underline flex items-center gap-1.5"
+                      className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 truncate underline flex items-center gap-1.5"
                     >
                       <span className="truncate">{profile.bookingUrl}</span>
                       <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                     </a>
                   ) : (
-                    <span className="text-slate-400 italic">Non configuré</span>
+                    <span className="text-slate-400 dark:text-slate-500 italic">Non configuré</span>
                   )}
                   <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
                 </div>
@@ -480,22 +480,22 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
         {/* Right: Live Email Simulator & Embed Code */}
         <div className="lg:col-span-7 space-y-6">
           {/* Client-Specific Simulated Email Window */}
-          <div className="bg-white rounded-2xl border border-slate-300 shadow-md overflow-hidden transition-all">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-300 dark:border-slate-700 shadow-md overflow-hidden transition-all">
             {/* 1. Header Bar adapts according to active client */}
             {emailClientTab === 'gmail' && (
-              <div className="bg-slate-100 border-b border-slate-200 px-4 py-2.5 flex items-center justify-between">
+              <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-2.5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-md bg-red-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
                     M
                   </div>
-                  <span className="text-xs font-bold text-slate-800">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
                     Nouveau message (Google Workspace / Gmail)
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-slate-400">
-                  <Minus className="w-3.5 h-3.5 hover:text-slate-700 cursor-pointer" />
-                  <Maximize2 className="w-3 h-3 hover:text-slate-700 cursor-pointer" />
-                  <X className="w-3.5 h-3.5 hover:text-slate-700 cursor-pointer" />
+                  <Minus className="w-3.5 h-3.5 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer" />
+                  <Maximize2 className="w-3 h-3 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer" />
+                  <X className="w-3.5 h-3.5 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer" />
                 </div>
               </div>
             )}
@@ -526,32 +526,32 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             )}
 
             {emailClientTab === 'apple' && (
-              <div className="bg-slate-200/90 border-b border-slate-300 px-4 py-3 flex items-center justify-between backdrop-blur-sm">
+              <div className="bg-slate-200/90 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700 px-4 py-3 flex items-center justify-between backdrop-blur-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]" />
                   <div className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]" />
                   <div className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]" />
-                  <span className="ml-2 text-xs font-semibold text-slate-700">
+                  <span className="ml-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
                     Nouveau message — Apple Mail (Mac & iOS)
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="p-1 rounded bg-white text-slate-700 shadow-xs border border-slate-200">
+                  <button className="p-1 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-xs border border-slate-200 dark:border-slate-600">
                     <Send className="w-3.5 h-3.5 text-blue-500" />
                   </button>
-                  <button className="p-1 rounded bg-white text-slate-700 shadow-xs border border-slate-200">
-                    <Paperclip className="w-3.5 h-3.5 text-slate-500" />
+                  <button className="p-1 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-xs border border-slate-200 dark:border-slate-600">
+                    <Paperclip className="w-3.5 h-3.5 text-slate-500 dark:text-slate-300" />
                   </button>
                 </div>
               </div>
             )}
 
             {/* Email client switcher bar */}
-            <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center justify-between text-xs">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700 px-4 py-2 flex items-center justify-between text-xs gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Changer de logiciel de messagerie :
               </span>
-              <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg text-xs">
+              <div className="flex items-center gap-1 bg-slate-200/70 dark:bg-slate-900 p-0.5 rounded-lg text-xs">
                 {[
                   { id: 'gmail', label: 'Gmail', icon: '🔴' },
                   { id: 'outlook', label: 'Outlook', icon: '🔵' },
@@ -562,8 +562,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     onClick={() => handleSelectClient(client.id as any)}
                     className={`px-3 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                       emailClientTab === client.id
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
+                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                     }`}
                   >
                     <span>{client.icon}</span>
@@ -574,14 +574,14 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </div>
 
             {/* Email Header Fields */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 bg-white space-y-2 text-xs text-slate-600">
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2 text-xs text-slate-600 dark:text-slate-300">
               <div className="flex items-center">
-                <span className="w-16 font-semibold text-slate-400">À :</span>
-                <span className="text-slate-700 font-medium">contact.client@example.com</span>
+                <span className="w-16 font-semibold text-slate-400 dark:text-slate-500">À :</span>
+                <span className="text-slate-700 dark:text-slate-200 font-medium">contact.client@example.com</span>
               </div>
               <div className="flex items-center">
-                <span className="w-16 font-semibold text-slate-400">Objet :</span>
-                <span className="text-slate-900 font-semibold">
+                <span className="w-16 font-semibold text-slate-400 dark:text-slate-500">Objet :</span>
+                <span className="text-slate-900 dark:text-slate-100 font-semibold">
                   {emailClientTab === 'outlook'
                     ? 'RE: Disponibilités pour le projet [Outlook 365]'
                     : emailClientTab === 'apple'
@@ -593,7 +593,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
             {/* Email Body Content with client-specific typography */}
             <div
-              className={`p-6 sm:p-8 space-y-6 bg-white min-h-[290px] ${
+              className={`p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900 min-h-[290px] ${
                 emailClientTab === 'outlook'
                   ? "font-['Calibri','Segoe_UI',sans-serif]"
                   : emailClientTab === 'apple'
@@ -601,7 +601,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   : 'font-sans'
               }`}
             >
-              <div className="space-y-3 text-sm text-slate-700 leading-relaxed">
+              <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                 <p>Bonjour,</p>
                 <p>
                   Merci pour votre message ! Je serais ravi de vous accompagner sur ce projet.
@@ -615,24 +615,26 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               <div
                 className={`pt-5 ${
                   emailClientTab === 'outlook'
-                    ? 'border-t border-slate-400/60'
-                    : 'border-t border-slate-200/80'
+                    ? 'border-t border-slate-400/60 dark:border-slate-700'
+                    : 'border-t border-slate-200/80 dark:border-slate-800'
                 }`}
               >
                 <div
                   className={`p-4 rounded-xl transition-all ${
-                    emailClientTab === 'outlook'
-                      ? 'bg-blue-50/30 border border-blue-200/80'
+                    badgeTheme === 'dark'
+                      ? 'bg-slate-950 border border-slate-800'
+                      : emailClientTab === 'outlook'
+                      ? 'bg-blue-50/30 dark:bg-slate-800/70 border border-blue-200/80 dark:border-slate-700'
                       : emailClientTab === 'apple'
-                      ? 'bg-slate-50 border border-slate-200'
-                      : 'bg-slate-50/80 border border-dashed border-slate-300'
+                      ? 'bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700'
+                      : 'bg-slate-50/80 dark:bg-slate-800/70 border border-dashed border-slate-300 dark:border-slate-700'
                   }`}
                 >
                   {/* STYLE 1: SIGNATURE COMPLÈTE (480x114 banner) */}
                   {badgeStyle === 'signature' && (
                     <div>
-                      <div className="mb-2.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <div className="mb-2.5 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800/70 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                         Format Tout-en-un (480 × 114 px) : Avatar, nom, poste et statut multiligne sans coupure
                       </div>
                       <div className="my-1 block">
@@ -649,11 +651,15 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   {/* STYLE 2: POINT MINIMALISTE (36x36) */}
                   {badgeStyle === 'dot' && (
                     <div>
-                      <div className="text-sm font-bold text-slate-900">{profile.name}</div>
-                      <div className="text-xs text-slate-500 mb-2.5">
+                      <div className={`text-sm font-bold ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
+                      <div className={`text-xs mb-2.5 ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
-                      <div className="my-1.5 flex items-center gap-3 p-2.5 bg-white rounded-lg border border-slate-200 w-fit shadow-xs">
+                      <div className={`my-1.5 flex items-center gap-3 p-2.5 rounded-lg border w-fit shadow-xs ${
+                        badgeTheme === 'dark'
+                          ? 'bg-slate-900 border-slate-700'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                      }`}>
                         <img
                           key={`dot-${format}-${refreshKey}`}
                           src={badgeUrl}
@@ -661,8 +667,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                           className="w-9 h-9 rounded-full shrink-0"
                         />
                         <div className="text-xs leading-snug">
-                          <span className="font-semibold text-slate-800 block">Disponibilité en direct</span>
-                          <span className="text-[11px] text-slate-500">Statut calculé en temps réel</span>
+                          <span className={`font-semibold block ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-800 dark:text-slate-100'}`}>Disponibilité en direct</span>
+                          <span className={`text-[11px] ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>Statut calculé en temps réel</span>
                         </div>
                       </div>
                     </div>
@@ -671,11 +677,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   {/* STYLE 3: CARTE COMPACTE (380x100) */}
                   {badgeStyle === 'card' && (
                     <div>
-                      <div className="text-sm font-bold text-slate-900">{profile.name}</div>
-                      <div className="text-xs text-slate-500 mb-2">
+                      <div className={`text-sm font-bold ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
+                      <div className={`text-xs mb-2 ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
-                      <div className="mb-2 text-[11px] text-slate-500 font-medium">
+                      <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         Widget encadré 380 × 100 px : statut et horaire sur 2 lignes sans coupure :
                       </div>
                       <div className="my-1 inline-block">
@@ -692,11 +698,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   {/* STYLE 4: PILL MODERNE (400x54) */}
                   {badgeStyle === 'pill' && (
                     <div>
-                      <div className="text-sm font-bold text-slate-900">{profile.name}</div>
-                      <div className="text-xs text-slate-500 mb-2">
+                      <div className={`text-sm font-bold ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
+                      <div className={`text-xs mb-2 ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
-                      <div className="mb-2 text-[11px] text-slate-500 font-medium">
+                      <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         Capsule 400 × 54 px : statut et horaire sur 2 lignes complètes sans coupure :
                       </div>
                       <div className="my-1 inline-block">
@@ -711,22 +717,22 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   )}
 
                   {profile.bookingUrl && (
-                    <div className="mt-3 text-xs text-indigo-600 font-medium">
+                    <div className="mt-3 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
                       📅 Prendre rendez-vous directement
                     </div>
                   )}
                 </div>
 
-                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
                   <span className="flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                    <Sparkles className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
                     Rendu fidèle pour <strong>{emailClientTab.toUpperCase()}</strong>
                   </span>
                   <a
                     href={badgeUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-indigo-600 hover:underline flex items-center gap-1 font-medium"
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
                   >
                     <ExternalLink className="w-3 h-3" />
                     Tester le lien image direct
@@ -737,30 +743,30 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
             {/* Gmail-like compose footer toolbar */}
             {emailClientTab === 'gmail' && (
-              <div className="bg-slate-100 border-t border-slate-200 px-4 py-2.5 flex items-center justify-between">
+              <div className="bg-slate-100 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-4 py-2.5 flex items-center justify-between">
                 <button className="px-4 py-1.5 bg-[#1a73e8] hover:bg-[#1557b0] text-white rounded-full text-xs font-semibold flex items-center gap-1.5 shadow-xs">
                   Envoyer
                 </button>
-                <div className="flex items-center gap-3 text-slate-500">
-                  <Paperclip className="w-4 h-4 hover:text-slate-800 cursor-pointer" />
-                  <Link2 className="w-4 h-4 hover:text-slate-800 cursor-pointer" />
-                  <Smile className="w-4 h-4 hover:text-slate-800 cursor-pointer" />
-                  <ImageIcon className="w-4 h-4 hover:text-slate-800 cursor-pointer" />
-                  <Trash2 className="w-4 h-4 hover:text-red-600 cursor-pointer ml-2" />
+                <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
+                  <Paperclip className="w-4 h-4 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer" />
+                  <Link2 className="w-4 h-4 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer" />
+                  <Smile className="w-4 h-4 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer" />
+                  <ImageIcon className="w-4 h-4 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer" />
+                  <Trash2 className="w-4 h-4 hover:text-red-600 dark:hover:text-red-400 cursor-pointer ml-2" />
                 </div>
               </div>
             )}
           </div>
 
           {/* Copyable Snippets Box with 1-Click Rich Copy */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-5">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Copy className="w-4 h-4 text-indigo-600" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Copy className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                   Exporter pour {emailClientTab === 'gmail' ? 'Gmail' : emailClientTab === 'outlook' ? 'Outlook' : 'Apple Mail'}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Copiez directement la signature visuelle ou collez le code adapté ci-dessous.
                 </p>
               </div>
@@ -768,7 +774,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               {/* 1-Click Rich Visual Copy Button */}
               <button
                 onClick={handleCopyRichText}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-md shadow-indigo-100 transition-all shrink-0"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-md shadow-indigo-100 dark:shadow-none transition-all shrink-0"
               >
                 {copiedFormat === 'rich' ? (
                   <>
@@ -785,8 +791,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </div>
 
             {/* Client-specific guide notice */}
-            <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 text-xs text-indigo-950 flex items-start gap-2.5">
-              <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-800/70 text-xs text-indigo-950 dark:text-indigo-100 flex items-start gap-2.5">
+              <Info className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
               <div>
                 {emailClientTab === 'gmail' && (
                   <span>
@@ -809,19 +815,19 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             {/* Export Tabs */}
             <div className="space-y-4 pt-2">
               {/* Option A: HTML Signature */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-indigo-600" />
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400" />
                     Option 1 : Code HTML optimisé ({emailClientTab.toUpperCase()})
                   </div>
                   <button
                     onClick={() => handleCopyCode(generateHtmlSignature(), 'html')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 cursor-pointer shadow-xs transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer shadow-xs transition-all shrink-0"
                   >
                     {copiedFormat === 'html' ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         Code copié !
                       </>
                     ) : (
@@ -832,25 +838,25 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     )}
                   </button>
                 </div>
-                <div className="bg-slate-900 text-slate-200 font-mono text-[11px] p-3 rounded-lg overflow-x-auto max-h-28 scrollbar-thin">
+                <div className="bg-slate-900 dark:bg-slate-950 text-slate-200 font-mono text-[11px] p-3 rounded-lg overflow-x-auto max-h-28 scrollbar-thin border border-transparent dark:border-slate-800">
                   <code>{generateHtmlSignature()}</code>
                 </div>
               </div>
 
               {/* Option B: Direct Image URL */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-violet-600" />
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-violet-600 dark:bg-violet-400" />
                     Option 2 : Lien direct vers l'image ({format.toUpperCase()})
                   </div>
                   <button
                     onClick={() => handleCopyCode(badgeUrl, 'url')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 cursor-pointer shadow-xs transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer shadow-xs transition-all shrink-0"
                   >
                     {copiedFormat === 'url' ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         URL copiée !
                       </>
                     ) : (
@@ -861,25 +867,25 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     )}
                   </button>
                 </div>
-                <div className="bg-slate-100 text-slate-700 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200">
+                <div className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200 dark:border-slate-800">
                   {badgeUrl}
                 </div>
               </div>
 
               {/* Option C: Markdown */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-slate-600" />
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-slate-600 dark:bg-slate-400" />
                     Option 3 : Code Markdown (GitHub, Notion, etc.)
                   </div>
                   <button
                     onClick={() => handleCopyCode(generateMarkdownSnippet(), 'md')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 cursor-pointer shadow-xs transition-all"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer shadow-xs transition-all shrink-0"
                   >
                     {copiedFormat === 'md' ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                         Markdown copié !
                       </>
                     ) : (
@@ -890,7 +896,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     )}
                   </button>
                 </div>
-                <div className="bg-slate-100 text-slate-700 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200">
+                <div className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200 dark:border-slate-800">
                   {generateMarkdownSnippet()}
                 </div>
               </div>
@@ -900,29 +906,29 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       </div>
 
       {/* 4-Style Visual Comparison Showcase */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Palette className="w-5 h-5 text-indigo-600" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <Palette className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               Comparatif direct des 4 styles (Aperçu en temps réel)
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Observez les différences de structure, de dimensions et d'intégration entre les 4 formats d'images générés :
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg w-fit">
-              Format actuel : <strong className="text-indigo-600">{format.toUpperCase()}</strong> ({emailClientTab.toUpperCase()})
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-xs font-semibold text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg w-fit">
+              Format actuel : <strong className="text-indigo-600 dark:text-indigo-400">{format.toUpperCase()}</strong> ({emailClientTab.toUpperCase()})
             </div>
             {onGoToSimulator && (
               <button
                 type="button"
                 onClick={onGoToSimulator}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/70 rounded-lg transition-colors cursor-pointer"
                 title="Simuler une date et heure spécifique pour voir les badges prévus"
               >
-                <Sliders className="w-3.5 h-3.5 text-indigo-600" />
+                <Sliders className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                 <span>Ouvrir le simulateur de date & heure</span>
               </button>
             )}
@@ -935,23 +941,25 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             onClick={() => setBadgeStyle('pill')}
             className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
               badgeStyle === 'pill'
-                ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-sm'
-                : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="font-bold text-sm text-slate-900">1. Pill Moderne</span>
+                <span className="font-bold text-sm text-slate-900 dark:text-slate-100">1. Pill Moderne</span>
               </div>
-              <span className="text-[11px] font-mono font-bold bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md shadow-2xs">
+              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 400 × 54 px
               </span>
             </div>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Capsule aérée sur 2 lignes sans coupure : statut en gras au-dessus et détail horaire complet en dessous. Idéal sous vos coordonnées textuelles.
             </p>
-            <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[70px]">
+            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[70px] ${
+              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+            }`}>
               <img
                 src={`${appBaseUrl}/api/badge.${format}?style=pill&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Pill Moderne"
@@ -959,8 +967,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               />
             </div>
             <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-400 text-[11px]">Type : Capsule 2 lignes</span>
-              <span className={`font-semibold ${badgeStyle === 'pill' ? 'text-indigo-600' : 'text-slate-500'}`}>
+              <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Capsule 2 lignes</span>
+              <span className={`font-semibold ${badgeStyle === 'pill' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'pill' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
             </div>
@@ -971,23 +979,25 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             onClick={() => setBadgeStyle('signature')}
             className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
               badgeStyle === 'signature'
-                ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-sm'
-                : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                <span className="font-bold text-sm text-slate-900">2. Signature Complète (Tout-en-un)</span>
+                <span className="font-bold text-sm text-slate-900 dark:text-slate-100">2. Signature Complète (Tout-en-un)</span>
               </div>
-              <span className="text-[11px] font-mono font-bold bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md shadow-2xs">
+              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 480 × 114 px
               </span>
             </div>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Bannière de prestige spacieuse intégrant avatar avec initiales, nom complet, poste/entreprise et boîte de statut multiligne. Remplace toute signature textuelle !
             </p>
-            <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[120px]">
+            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[120px] ${
+              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+            }`}>
               <img
                 src={`${appBaseUrl}/api/badge.${format}?style=signature&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Signature Complète"
@@ -995,8 +1005,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               />
             </div>
             <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-400 text-[11px]">Type : Bannière de visite complète</span>
-              <span className={`font-semibold ${badgeStyle === 'signature' ? 'text-indigo-600' : 'text-slate-500'}`}>
+              <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Bannière de visite complète</span>
+              <span className={`font-semibold ${badgeStyle === 'signature' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'signature' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
             </div>
@@ -1007,23 +1017,25 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             onClick={() => setBadgeStyle('card')}
             className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
               badgeStyle === 'card'
-                ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-sm'
-                : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                <span className="font-bold text-sm text-slate-900">3. Carte Compacte</span>
+                <span className="font-bold text-sm text-slate-900 dark:text-slate-100">3. Carte Compacte</span>
               </div>
-              <span className="text-[11px] font-mono font-bold bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md shadow-2xs">
+              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 380 × 100 px
               </span>
             </div>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Widget encadré élégant avec votre nom en haut et encart de statut à double ligne (statut en gras + horaire détaillé) parfaitement lisible.
             </p>
-            <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[110px]">
+            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[110px] ${
+              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+            }`}>
               <img
                 src={`${appBaseUrl}/api/badge.${format}?style=card&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Carte Compacte"
@@ -1031,8 +1043,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               />
             </div>
             <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-400 text-[11px]">Type : Widget encadré 2 lignes</span>
-              <span className={`font-semibold ${badgeStyle === 'card' ? 'text-indigo-600' : 'text-slate-500'}`}>
+              <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Widget encadré 2 lignes</span>
+              <span className={`font-semibold ${badgeStyle === 'card' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'card' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
             </div>
@@ -1043,23 +1055,25 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             onClick={() => setBadgeStyle('dot')}
             className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
               badgeStyle === 'dot'
-                ? 'border-indigo-600 bg-indigo-50/50 ring-2 ring-indigo-500/20 shadow-sm'
-                : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300'
+                ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
+                : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                <span className="font-bold text-sm text-slate-900">4. Point Minimaliste</span>
+                <span className="font-bold text-sm text-slate-900 dark:text-slate-100">4. Point Minimaliste</span>
               </div>
-              <span className="text-[11px] font-mono font-bold bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md shadow-2xs">
+              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 36 × 36 px
               </span>
             </div>
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-slate-600 dark:text-slate-400">
               Rond discret 36x36 avec halo lumineux pulsant. Parfait si vous souhaitez ajouter votre propre texte à côté ou le glisser à côté d'icônes de réseaux sociaux.
             </p>
-            <div className="pt-2 flex items-center justify-center p-3 bg-white rounded-xl border border-slate-200 min-h-[60px]">
+            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[60px] ${
+              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+            }`}>
               <img
                 src={`${appBaseUrl}/api/badge.${format}?style=dot&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
                 alt="Aperçu Point Minimaliste"
@@ -1067,8 +1081,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               />
             </div>
             <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-400 text-[11px]">Type : Rond indicateur seul</span>
-              <span className={`font-semibold ${badgeStyle === 'dot' ? 'text-indigo-600' : 'text-slate-500'}`}>
+              <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Rond indicateur seul</span>
+              <span className={`font-semibold ${badgeStyle === 'dot' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'dot' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
             </div>
