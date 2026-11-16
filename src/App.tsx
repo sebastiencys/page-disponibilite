@@ -77,6 +77,15 @@ export default function App() {
   // Profile data (read-only from config/personal.json, refreshed via /api/status)
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
 
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const name = profile?.name?.trim();
+      document.title = name
+        ? `${name} — Disponibilité en direct | DispoLive`
+        : 'DispoLive - Statut & Badge Signature en Temps Réel';
+    }
+  }, [profile?.name]);
+
   const [icsUrl, setIcsUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem(`${LOCAL_STORAGE_KEY}_ics`) || '';
