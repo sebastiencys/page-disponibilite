@@ -44,8 +44,8 @@ export interface CalendarEvent {
   isBusy?: boolean; // true if marks user as busy (default true)
 }
 
-import scheduleJson from '../config/schedule.json' with { type: 'json' };
-import personalJson from '../config/personal.json' with { type: 'json' };
+import scheduleJson from '../../config/schedule.json' with { type: 'json' };
+import personalJson from '../../config/personal.json' with { type: 'json' };
 
 export interface UserProfile {
   name: string;

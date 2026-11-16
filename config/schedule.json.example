@@ -15,7 +15,7 @@
     "end": "13:30",
     "label": "Pause déjeuner",
     "days": {
-      "4": { "enabled": true,  "start": "12:00", "end": "13:00" }
+      "4": { "enabled": true, "start": "12:00", "end": "13:00" }
     }
   },
   "bufferMinutes": 0
