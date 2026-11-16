@@ -8,6 +8,8 @@ import {
   createDateInTimezone,
   getZonedDateParts,
   getAnonymizedUpcomingSlots,
+  getEffectiveLunchBreak,
+  formatTimeShort,
   type CalendarEvent,
   type ScheduleConfig,
   type AnonymizedSlot,
@@ -128,23 +130,76 @@ test('manual override takes precedence over schedule and events', () => {
   assert.match(result.subtitle, /12h00/);
 });
 
-test('event scheduled on a weekend or off-hours does not mark user as busy, remains off-hours', () => {
-  // Saturday 10:00 Paris (Saturday is closed/off-day)
+test('timed event scheduled on a weekend or off-hours marks user as busy (meetings evaluated first)', () => {
+  // Saturday 10:00 Paris (Saturday is normally closed, but user has an active meeting 09:30 - 11:00)
   const saturday = parisDate('2026-11-07T10:00:00');
   const events: CalendarEvent[] = [
     {
       id: 'weekend-evt',
-      title: 'Événement personnel weekend',
+      title: 'Réunion exceptionnelle weekend',
       start: parisDate('2026-11-07T09:30:00').toISOString(),
       end: parisDate('2026-11-07T11:00:00').toISOString(),
       isBusy: true,
     },
   ];
   const result = calculateAvailability(saturday, DEFAULT_SCHEDULE, events);
-  assert.equal(result.status, 'OFF_HOURS');
-  assert.equal(result.state, 'off');
-  assert.equal(result.isWorkTime, false);
-  assert.match(result.subtitle, /lundi/i);
+  assert.equal(result.status, 'BUSY');
+  assert.equal(result.state, 'busy');
+  assert.match(result.subtitle, /11h00/);
+});
+
+test('all-day event aligns to working hours of working days and skips non-working days', () => {
+  const tz = 'Indian/Reunion';
+  // All-day event covering Fri 20/11, Sat 21/11, Sun 22/11, Mon 23/11 (DTEND exclusive 2026-11-24)
+  const events: CalendarEvent[] = [
+    {
+      id: 'allday-1',
+      title: 'Déplacement / Congé',
+      start: createDateInTimezone('2026-11-20', '00:00', tz).toISOString(),
+      end: createDateInTimezone('2026-11-24', '00:00', tz).toISOString(),
+      isAllDay: true,
+      allDayStartDate: '2026-11-20',
+      allDayEndDate: '2026-11-24',
+      isBusy: true,
+    },
+  ];
+
+  // Before work on Mon 23/11 at 07:30 Réunion -> OFF_HOURS
+  const monEarly = createDateInTimezone('2026-11-23', '07:30', tz);
+  assert.equal(calculateAvailability(monEarly, DEFAULT_SCHEDULE, events, undefined, tz).status, 'OFF_HOURS');
+
+  // During work on Mon 23/11 at 10:00 Réunion -> BUSY until 18h00
+  const monWork = createDateInTimezone('2026-11-23', '10:00', tz);
+  const monWorkAvail = calculateAvailability(monWork, DEFAULT_SCHEDULE, events, undefined, tz);
+  assert.equal(monWorkAvail.status, 'BUSY');
+  assert.equal(monWorkAvail.subtitle, 'Libre à 18h00');
+
+  // On Saturday 21/11 at 10:00 Réunion -> OFF_HOURS (all-day aligns only to enabled work days)
+  const satWork = createDateInTimezone('2026-11-21', '10:00', tz);
+  assert.equal(calculateAvailability(satWork, DEFAULT_SCHEDULE, events, undefined, tz).status, 'OFF_HOURS');
+
+  // Upcoming anonymized slots from Thu 19/11 18:00 -> Fri (09:00-17:30) and Mon (09:00-18:00)
+  const fromDate = createDateInTimezone('2026-11-19', '18:00', tz);
+  const slots = getAnonymizedUpcomingSlots(events, fromDate, 8, DEFAULT_SCHEDULE, tz);
+  assert.equal(slots.length, 2);
+
+  const friStart = getZonedDateParts(new Date(slots[0].start), tz);
+  const friEnd = getZonedDateParts(new Date(slots[0].end), tz);
+  assert.equal(friStart.day, 20);
+  assert.equal(friStart.hour, 9);
+  assert.equal(friStart.minute, 0);
+  assert.equal(friEnd.day, 20);
+  assert.equal(friEnd.hour, 17);
+  assert.equal(friEnd.minute, 30);
+
+  const monStart = getZonedDateParts(new Date(slots[1].start), tz);
+  const monEnd = getZonedDateParts(new Date(slots[1].end), tz);
+  assert.equal(monStart.day, 23);
+  assert.equal(monStart.hour, 9);
+  assert.equal(monStart.minute, 0);
+  assert.equal(monEnd.day, 23);
+  assert.equal(monEnd.hour, 18);
+  assert.equal(monEnd.minute, 0);
 });
 
 test('loads DEFAULT_PROFILE securely from config/personal.json', () => {
@@ -158,8 +213,8 @@ test('loads DEFAULT_PROFILE securely from config/personal.json', () => {
 });
 
 test('createDateInTimezone constructs precise wall-clock time in any timezone', () => {
-  const parisDate = createDateInTimezone('2026-11-16', '14:30', 'Europe/Paris');
-  const parisParts = getZonedDateParts(parisDate, 'Europe/Paris');
+  const parisDateVal = createDateInTimezone('2026-11-16', '14:30', 'Europe/Paris');
+  const parisParts = getZonedDateParts(parisDateVal, 'Europe/Paris');
   assert.equal(parisParts.year, 2026);
   assert.equal(parisParts.month, 11);
   assert.equal(parisParts.day, 16);
@@ -227,4 +282,78 @@ test('getAnonymizedUpcomingSlots strips all secret details and merges overlappin
   assert.equal(slotObj.location, undefined);
 });
 
+test('Thursday 13:00-13:30 meeting takes precedence over lunch break (12:30-13:30) and shows in upcomingSlots', () => {
+  const tz = 'Indian/Reunion';
+  const thursday1310 = createDateInTimezone('2026-11-19', '13:10', tz);
+  const events: CalendarEvent[] = [
+    {
+      id: 'thu-13h',
+      title: 'Réunion Jeudi 13h',
+      start: createDateInTimezone('2026-11-19', '13:00', tz).toISOString(),
+      end: createDateInTimezone('2026-11-19', '13:30', tz).toISOString(),
+      isBusy: true,
+    },
+  ];
+
+  const avail = calculateAvailability(thursday1310, DEFAULT_SCHEDULE, events, undefined, tz);
+  assert.equal(avail.status, 'BUSY');
+  assert.equal(avail.subtitle, 'Libre à 13h30');
+
+  const morning = createDateInTimezone('2026-11-19', '10:00', tz);
+  const slots = getAnonymizedUpcomingSlots(events, morning, 8, DEFAULT_SCHEDULE, tz);
+  assert.equal(slots.length, 1);
+  assert.equal(formatTimeShort(new Date(slots[0].start), tz), '13h00');
+  assert.equal(formatTimeShort(new Date(slots[0].end), tz), '13h30');
+});
+
+test('per-day lunchBreak.days override takes priority over global lunchBreak and falls back when empty', () => {
+  const tz = 'Indian/Reunion';
+  const customSchedule: ScheduleConfig = {
+    ...DEFAULT_SCHEDULE,
+    lunchBreak: {
+      enabled: true,
+      start: '12:30',
+      end: '13:30',
+      label: 'Pause déjeuner',
+      days: {
+        4: { enabled: true, start: '12:00', end: '12:30' }, // Thursday 12:00-12:30
+        2: { start: '', end: '' }, // Empty strings fall back to global 12:30-13:30
+        3: { enabled: false }, // Wednesday lunch disabled
+      },
+    },
+  };
+
+  // Monday (no override) -> global 12:30-13:30
+  const mondayLunch = getEffectiveLunchBreak(customSchedule, 1);
+  assert.equal(mondayLunch.start, '12:30');
+  assert.equal(mondayLunch.end, '13:30');
+  assert.equal(mondayLunch.isCustomForDay, false);
+
+  // Tuesday (blank override) -> falls back to global 12:30-13:30
+  const tuesdayLunch = getEffectiveLunchBreak(customSchedule, 2);
+  assert.equal(tuesdayLunch.start, '12:30');
+  assert.equal(tuesdayLunch.end, '13:30');
+  assert.equal(tuesdayLunch.isCustomForDay, false);
+
+  // Wednesday (enabled: false) -> no lunch break
+  const wednesday1245 = createDateInTimezone('2026-11-18', '12:45', tz);
+  assert.equal(calculateAvailability(wednesday1245, customSchedule, [], undefined, tz).status, 'AVAILABLE');
+
+  // Thursday at 11:00 -> available until 12h00 (pause)
+  const thu1100 = createDateInTimezone('2026-11-19', '11:00', tz);
+  const thu1100Avail = calculateAvailability(thu1100, customSchedule, [], undefined, tz);
+  assert.equal(thu1100Avail.status, 'AVAILABLE');
+  assert.equal(thu1100Avail.subtitle, "Jusqu'à 12h00 (pause)");
+
+  // Thursday at 12:15 -> LUNCH (Reprise à 12h30)
+  const thu1215 = createDateInTimezone('2026-11-19', '12:15', tz);
+  const thu1215Avail = calculateAvailability(thu1215, customSchedule, [], undefined, tz);
+  assert.equal(thu1215Avail.status, 'LUNCH');
+  assert.equal(thu1215Avail.subtitle, 'Reprise à 12h30');
+
+  // Thursday at 12:45 -> AVAILABLE (not lunch, because Thursday lunch ended at 12:30!)
+  const thu1245 = createDateInTimezone('2026-11-19', '12:45', tz);
+  const thu1245Avail = calculateAvailability(thu1245, customSchedule, [], undefined, tz);
+  assert.equal(thu1245Avail.status, 'AVAILABLE');
+});
 

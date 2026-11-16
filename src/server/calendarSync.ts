@@ -4,16 +4,22 @@
  */
 
 import { parseIcsEvents } from '../lib/icalParser.ts';
-import type { CalendarEvent } from '../lib/availability.ts';
+import { DEFAULT_SCHEDULE, type CalendarEvent } from '../lib/availability.ts';
 
 interface CacheEntry {
   events: CalendarEvent[];
+  icsText: string;
+  windowStartMs: number;
+  windowEndMs: number;
   fetchedAt: number;
   url: string;
+  timezone: string;
 }
 
 let memoryCache: CacheEntry | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache to avoid rate-limiting
+const DEFAULT_PAST_MS = 7 * 86400000;
+const DEFAULT_FUTURE_MS = 90 * 86400000;
 
 /**
  * Returns whether a private calendar URL is configured in environment variables
@@ -32,12 +38,24 @@ export function getCalendarUrl(fallbackUrl?: string): string | null {
   return null;
 }
 
+function getEventsForTargetTime(entry: CacheEntry, targetTime?: Date): CalendarEvent[] {
+  if (!targetTime || !entry.icsText) {
+    return entry.events;
+  }
+  const targetMs = targetTime.getTime();
+  if (targetMs >= entry.windowStartMs && targetMs <= entry.windowEndMs) {
+    return entry.events;
+  }
+  return parseIcsEvents(entry.icsText, entry.timezone, { now: targetTime });
+}
+
 /**
  * Fetches and parses calendar events from the secure URL with caching
  */
 export async function getSyncedCalendarEvents(
   fallbackUrl?: string,
-  forceRefresh = false
+  forceRefresh = false,
+  targetTime?: Date
 ): Promise<{ events: CalendarEvent[]; fromCache: boolean; lastSync: Date | null }> {
   const url = getCalendarUrl(fallbackUrl);
   if (!url) {
@@ -45,11 +63,18 @@ export async function getSyncedCalendarEvents(
   }
 
   const now = Date.now();
+  const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
 
   // Check cache validity
-  if (!forceRefresh && memoryCache && memoryCache.url === url && now - memoryCache.fetchedAt < CACHE_TTL_MS) {
+  if (
+    !forceRefresh &&
+    memoryCache &&
+    memoryCache.url === url &&
+    memoryCache.timezone === timezone &&
+    now - memoryCache.fetchedAt < CACHE_TTL_MS
+  ) {
     return {
-      events: memoryCache.events,
+      events: getEventsForTargetTime(memoryCache, targetTime),
       fromCache: true,
       lastSync: new Date(memoryCache.fetchedAt),
     };
@@ -73,16 +98,21 @@ export async function getSyncedCalendarEvents(
     }
 
     const icsText = await res.text();
-    const parsed = parseIcsEvents(icsText);
+    const nowDate = new Date(now);
+    const parsed = parseIcsEvents(icsText, timezone, { now: nowDate });
 
     memoryCache = {
       events: parsed,
+      icsText,
+      windowStartMs: now - DEFAULT_PAST_MS,
+      windowEndMs: now + DEFAULT_FUTURE_MS,
       fetchedAt: now,
       url,
+      timezone,
     };
 
     return {
-      events: parsed,
+      events: getEventsForTargetTime(memoryCache, targetTime),
       fromCache: false,
       lastSync: new Date(now),
     };
@@ -91,7 +121,7 @@ export async function getSyncedCalendarEvents(
     // If fetch failed but we have a cached version, return cached even if stale
     if (memoryCache && memoryCache.url === url) {
       return {
-        events: memoryCache.events,
+        events: getEventsForTargetTime(memoryCache, targetTime),
         fromCache: true,
         lastSync: new Date(memoryCache.fetchedAt),
       };

@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { DEFAULT_SCHEDULE } from '../src/lib/availability.ts';
 import { parseIcsEvents } from '../src/lib/icalParser.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -26,7 +27,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error(`Failed to fetch ICS: ${response.statusText}`);
     }
     const icsText = await response.text();
-    const events = parseIcsEvents(icsText);
+    const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
+    const events = parseIcsEvents(icsText, timezone);
 
     return res.status(200).json({ success: true, count: events.length, events });
   } catch (err: any) {

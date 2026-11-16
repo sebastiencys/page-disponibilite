@@ -11,9 +11,10 @@ import {
   Lock,
   FileCode,
 } from 'lucide-react';
-import type {
-  ScheduleConfig,
-  DayOfWeek,
+import {
+  getEffectiveLunchBreak,
+  type ScheduleConfig,
+  type DayOfWeek,
 } from '../lib/availability.ts';
 
 interface CalendarScheduleProps {
@@ -167,14 +168,50 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
 
             {schedule.lunchBreak.enabled ? (
               <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/80 flex items-center justify-between text-xs">
-                <div className="text-slate-700 font-medium">Plage de pause automatique :</div>
+                <div className="text-slate-700 font-medium">Plage de pause habituelle :</div>
                 <div className="font-mono font-bold text-amber-900 bg-white px-3 py-1 rounded-md border border-amber-200">
                   {schedule.lunchBreak.start.replace(':', 'h')} à {schedule.lunchBreak.end.replace(':', 'h')}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-500 italic">Aucune pause déjeuner automatique configurée.</p>
+              <p className="text-xs text-slate-500 italic">Aucune pause déjeuner globale configurée.</p>
             )}
+
+            {(() => {
+              const customLunchDays = DAYS_META.map(({ key, label }) => {
+                const eff = getEffectiveLunchBreak(schedule, key);
+                return schedule.days[key]?.enabled && eff.isCustomForDay
+                  ? { key, label, eff }
+                  : null;
+              }).filter(Boolean) as { key: DayOfWeek; label: string; eff: ReturnType<typeof getEffectiveLunchBreak> }[];
+
+              if (customLunchDays.length === 0) return null;
+
+              return (
+                <div className="space-y-2 pt-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Horaires spécifiques (prioritaires)
+                  </div>
+                  <div className="space-y-1.5">
+                    {customLunchDays.map(({ key, label, eff }) => (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 border border-slate-200/80 text-xs"
+                      >
+                        <span className="font-semibold text-slate-700">{label}</span>
+                        {eff.enabled ? (
+                          <span className="font-mono font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded border border-amber-200">
+                            {eff.start.replace(':', 'h')} à {eff.end.replace(':', 'h')}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">Pas de pause</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 

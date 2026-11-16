@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Clock,
   Calendar as CalendarIcon,
@@ -23,10 +23,13 @@ import {
   calculateAvailability,
   createDateInTimezone,
   getZonedDateParts,
+  getEffectiveLunchBreak,
   formatTimeShort,
   type ScheduleConfig,
   type UserProfile,
   type AvailabilityResult,
+  type AnonymizedSlot,
+  type CalendarEvent,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
 } from '../lib/availability.ts';
@@ -40,6 +43,7 @@ interface AvailabilitySimulatorProps {
   schedule?: ScheduleConfig;
   profile?: UserProfile;
   timezone?: string;
+  upcomingSlots?: AnonymizedSlot[];
   appBaseUrl: string;
   onGoToStudio?: () => void;
 }
@@ -48,6 +52,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   schedule = DEFAULT_SCHEDULE,
   profile = DEFAULT_PROFILE,
   timezone = schedule.timezone || 'Europe/Paris',
+  upcomingSlots = [],
   appBaseUrl,
   onGoToStudio,
 }) => {
@@ -90,10 +95,59 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
     return createDateInTimezone(dateStr, timeStr, timezone);
   }, [dateStr, timeStr, timezone]);
 
-  // Compute availability for this simulated wall-clock time
+  const simulatedIso = simulatedDate.toISOString();
+
+  // Privacy-safe anonymized busy events for instant local fallback
+  const anonymizedEvents = useMemo<CalendarEvent[]>(() => {
+    return upcomingSlots.map((slot, idx) => ({
+      id: `sim-slot-${idx}`,
+      title: slot.label || 'Créneau réservé',
+      start: slot.start,
+      end: slot.end,
+      isBusy: true,
+    }));
+  }, [upcomingSlots]);
+
+  const localSimulatedAvailability = useMemo<AvailabilityResult>(() => {
+    return calculateAvailability(simulatedDate, schedule, anonymizedEvents, { type: 'auto' }, timezone);
+  }, [simulatedDate, schedule, anonymizedEvents, timezone]);
+
+  const [serverSimulation, setServerSimulation] = useState<{
+    iso: string;
+    availability: AvailabilityResult;
+  } | null>(null);
+
+  // Query server /api/status?time=... so ALL calendar events (recurring, past/future, all-day) are evaluated truthfully
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/status?time=${encodeURIComponent(simulatedIso)}`, {
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.availability) {
+            setServerSimulation({ iso: simulatedIso, availability: data.availability });
+          }
+        }
+      } catch {
+        // Ignore aborts / offline fallback gracefully uses localSimulatedAvailability
+      }
+    }, 60);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [simulatedIso]);
+
   const simulatedAvailability = useMemo<AvailabilityResult>(() => {
-    return calculateAvailability(simulatedDate, schedule, [], { type: 'auto' }, timezone);
-  }, [simulatedDate, schedule, timezone]);
+    if (serverSimulation && serverSimulation.iso === simulatedIso) {
+      return serverSimulation.availability;
+    }
+    return localSimulatedAvailability;
+  }, [serverSimulation, simulatedIso, localSimulatedAvailability]);
 
   // Simulation day analysis info
   const simulatedParts = useMemo(() => {
@@ -101,6 +155,10 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   }, [simulatedDate, timezone]);
 
   const daySchedule = schedule.days[simulatedParts.dayOfWeek];
+  const dayLunchBreak = useMemo(
+    () => getEffectiveLunchBreak(schedule, simulatedParts.dayOfWeek),
+    [schedule, simulatedParts.dayOfWeek]
+  );
   const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   const currentDayName = dayNames[simulatedParts.dayOfWeek];
 
@@ -233,7 +291,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
               Simulateur de Disponibilité
             </h1>
             <p className="text-indigo-100/90 text-sm sm:text-base leading-relaxed">
-              Testez n'importe quel jour ou heure de la semaine pour observer comment vos badges réagiront automatiquement (heures de bureau, pause déjeuner, soirées, week-ends).
+              Testez n'importe quel jour ou heure de la semaine pour observer comment vos badges réagiront automatiquement (réunions d'agenda prioritaires, heures de bureau, pause déjeuner, soirées, week-ends).
             </p>
           </div>
 
@@ -459,10 +517,12 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             </span>
           </div>
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1">
-            <span className="text-slate-400 block font-medium">2. Pause déjeuner</span>
+            <span className="text-slate-400 block font-medium">
+              2. Pause déjeuner ({currentDayName})
+            </span>
             <span className="font-semibold text-slate-800">
-              {schedule.lunchBreak?.enabled
-                ? `${schedule.lunchBreak.start} - ${schedule.lunchBreak.end}`
+              {dayLunchBreak.enabled
+                ? `${dayLunchBreak.start} - ${dayLunchBreak.end}${dayLunchBreak.isCustomForDay ? ' (spécifique)' : ''}`
                 : 'Désactivée'}
             </span>
           </div>

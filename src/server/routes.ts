@@ -62,9 +62,9 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-async function resolveCurrentEvents(): Promise<CalendarEvent[]> {
+async function resolveCurrentEvents(targetTime?: Date): Promise<CalendarEvent[]> {
   if (hasEnvCalendar() || globalStore.icsUrl) {
-    const { events } = await getSyncedCalendarEvents(globalStore.icsUrl);
+    const { events } = await getSyncedCalendarEvents(globalStore.icsUrl, false, targetTime);
     if (events && events.length > 0) {
       return events;
     }
@@ -131,7 +131,7 @@ export async function handleApiRequest(
       if (!isNaN(parsed.getTime())) now = parsed;
     }
 
-    const currentEvents = await resolveCurrentEvents();
+    const currentEvents = await resolveCurrentEvents(now);
     const avail = calculateAvailability(
       now,
       globalStore.schedule,
@@ -159,7 +159,7 @@ export async function handleApiRequest(
       const parsed = new Date(query.time);
       if (!isNaN(parsed.getTime())) now = parsed;
     }
-    const currentEvents = await resolveCurrentEvents();
+    const currentEvents = await resolveCurrentEvents(now);
     const avail = calculateAvailability(
       now,
       globalStore.schedule,
@@ -181,10 +181,14 @@ export async function handleApiRequest(
     return true;
   }
 
-  // 3. Current Live Status (JSON)
+  // 3. Current Live Status (JSON) — also supports ?time=<ISO> for simulation
   if (pathname === '/api/status') {
-    const now = new Date();
-    const currentEvents = await resolveCurrentEvents();
+    let now = new Date();
+    if (query.time && typeof query.time === 'string') {
+      const parsed = new Date(query.time);
+      if (!isNaN(parsed.getTime())) now = parsed;
+    }
+    const currentEvents = await resolveCurrentEvents(now);
     const avail = calculateAvailability(
       now,
       globalStore.schedule,
@@ -192,7 +196,13 @@ export async function handleApiRequest(
       globalStore.override,
       serverTimezone
     );
-    const upcomingSlots = getAnonymizedUpcomingSlots(currentEvents, now, 8);
+    const upcomingSlots = getAnonymizedUpcomingSlots(
+      currentEvents,
+      now,
+      8,
+      globalStore.schedule,
+      serverTimezone
+    );
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
@@ -256,7 +266,7 @@ export async function handleApiRequest(
         throw new Error(`Failed to fetch ICS: ${response.statusText}`);
       }
       const icsText = await response.text();
-      const events = parseIcsEvents(icsText);
+      const events = parseIcsEvents(icsText, serverTimezone);
 
       globalStore.events = events;
       globalStore.icsUrl = url;

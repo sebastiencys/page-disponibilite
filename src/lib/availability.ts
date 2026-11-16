@@ -11,11 +11,19 @@ export interface DaySchedule {
   end: string;   // "HH:mm" e.g. "18:00"
 }
 
+export interface DayLunchOverride {
+  enabled?: boolean;
+  start?: string;
+  end?: string;
+  label?: string;
+}
+
 export interface BreakSchedule {
   enabled: boolean;
   start: string; // "12:30"
   end: string;   // "13:30"
   label: string; // "Pause déjeuner"
+  days?: Partial<Record<DayOfWeek, DayLunchOverride>>;
 }
 
 export interface ScheduleConfig {
@@ -31,6 +39,8 @@ export interface CalendarEvent {
   start: string | Date; // ISO string or Date
   end: string | Date;
   isAllDay?: boolean;
+  allDayStartDate?: string; // "YYYY-MM-DD"
+  allDayEndDate?: string;   // "YYYY-MM-DD" (exclusive per RFC 5545)
   isBusy?: boolean; // true if marks user as busy (default true)
 }
 
@@ -92,6 +102,67 @@ function formatMinutesToTime(minutes: number): string {
   const h = Math.floor(minutes / 60) % 24;
   const m = minutes % 60;
   return `${h.toString().padStart(2, '0')}h${m > 0 ? m.toString().padStart(2, '0') : '00'}`;
+}
+
+export interface EffectiveLunchBreak {
+  enabled: boolean;
+  start: string;
+  end: string;
+  label: string;
+  isCustomForDay: boolean;
+}
+
+/**
+ * Resolves the lunch break for a specific day of week.
+ * Day-specific entries in schedule.lunchBreak.days take priority over global lunchBreak,
+ * falling back to the global lunchBreak whenever fields are absent or blank.
+ */
+export function getEffectiveLunchBreak(
+  schedule: ScheduleConfig,
+  dayOfWeek: DayOfWeek
+): EffectiveLunchBreak {
+  const globalBreak = schedule.lunchBreak;
+  const defaultLabel = globalBreak.label?.trim() || 'Pause déjeuner';
+  const dayOverride = globalBreak.days?.[dayOfWeek];
+
+  if (!dayOverride) {
+    return {
+      enabled: Boolean(globalBreak.enabled),
+      start: globalBreak.start,
+      end: globalBreak.end,
+      label: defaultLabel,
+      isCustomForDay: false,
+    };
+  }
+
+  const customStart = dayOverride.start?.trim();
+  const customEnd = dayOverride.end?.trim();
+  const customLabel = dayOverride.label?.trim();
+  const hasCustomTime = Boolean(customStart || customEnd);
+
+  const start = customStart || globalBreak.start;
+  const end = customEnd || globalBreak.end;
+  const label = customLabel || defaultLabel;
+  const enabled =
+    dayOverride.enabled !== undefined
+      ? Boolean(dayOverride.enabled)
+      : hasCustomTime
+      ? true
+      : Boolean(globalBreak.enabled);
+
+  const isCustomForDay =
+    enabled !== Boolean(globalBreak.enabled) ||
+    start !== globalBreak.start ||
+    end !== globalBreak.end ||
+    label !== defaultLabel;
+
+  return {
+    enabled,
+    start,
+    end,
+    label,
+    isCustomForDay,
+  };
 }
 
 export function getZonedDateParts(date: Date, timeZone: string = 'Europe/Paris') {
@@ -179,7 +250,7 @@ export function formatTimeShort(date: Date, timeZone: string = 'Europe/Paris'): 
 /**
  * Creates a Date object representing the specified date and time in the target timezone.
  * @param dateStr "YYYY-MM-DD"
- * @param timeStr "HH:mm"
+ * @param timeStr "HH:mm" or "HH:mm:ss"
  * @param timeZone target timezone (e.g. "Europe/Paris" or "Indian/Reunion")
  */
 export function createDateInTimezone(
@@ -188,12 +259,91 @@ export function createDateInTimezone(
   timeZone: string = 'Europe/Paris'
 ): Date {
   const [year, month, day] = dateStr.split('-').map(Number);
-  const [hour, minute] = timeStr.split(':').map(Number);
-  const utcGuess = new Date(Date.UTC(year, (month || 1) - 1, day || 1, hour || 0, minute || 0));
-  const parts = getZonedDateParts(utcGuess, timeZone);
-  const asTz = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute));
-  const diffMs = asTz.getTime() - utcGuess.getTime();
-  return new Date(utcGuess.getTime() - diffMs);
+  const [hour, minute, second] = timeStr.split(':').map(Number);
+  const utcGuess = new Date(
+    Date.UTC(year, (month || 1) - 1, day || 1, hour || 0, minute || 0, second || 0)
+  );
+  const parts1 = getZonedDateParts(utcGuess, timeZone);
+  const asTz1 = new Date(
+    Date.UTC(parts1.year, parts1.month - 1, parts1.day, parts1.hour, parts1.minute, parts1.second)
+  );
+  const candidate = new Date(utcGuess.getTime() - (asTz1.getTime() - utcGuess.getTime()));
+
+  // Second pass handles DST boundary transitions accurately
+  const parts2 = getZonedDateParts(candidate, timeZone);
+  const asTz2 = new Date(
+    Date.UTC(parts2.year, parts2.month - 1, parts2.day, parts2.hour, parts2.minute, parts2.second)
+  );
+  const diff2 = asTz2.getTime() - utcGuess.getTime();
+  return diff2 === 0 ? candidate : new Date(candidate.getTime() - diff2);
+}
+
+function formatZonedDateStr(date: Date, timeZone: string): string {
+  const p = getZonedDateParts(date, timeZone);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+}
+
+function addDaysToDateStr(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, (d || 1) + days));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Expands all-day events onto working days using each working day's configured start/end hours.
+ * Timed events are preserved verbatim so meetings outside work hours are still respected.
+ */
+export function normalizeEventsForSchedule(
+  events: CalendarEvent[],
+  schedule: ScheduleConfig = DEFAULT_SCHEDULE,
+  timeZone: string = schedule.timezone || 'Europe/Paris'
+): CalendarEvent[] {
+  const normalized: CalendarEvent[] = [];
+
+  for (const evt of events) {
+    if (!evt.isAllDay) {
+      normalized.push(evt);
+      continue;
+    }
+
+    if (evt.isBusy === false) {
+      continue;
+    }
+
+    const startDateRaw = evt.allDayStartDate && /^\d{4}-\d{2}-\d{2}$/.test(evt.allDayStartDate)
+      ? evt.allDayStartDate
+      : formatZonedDateStr(new Date(evt.start), timeZone);
+
+    let endDateRaw = evt.allDayEndDate && /^\d{4}-\d{2}-\d{2}$/.test(evt.allDayEndDate)
+      ? evt.allDayEndDate
+      : formatZonedDateStr(new Date(evt.end), timeZone);
+
+    if (endDateRaw <= startDateRaw) {
+      endDateRaw = addDaysToDateStr(startDateRaw, 1);
+    }
+
+    let curDate = startDateRaw;
+    let guard = 0;
+    while (curDate < endDateRaw && guard < 90) {
+      const dayOfWeek = new Date(`${curDate}T12:00:00Z`).getUTCDay() as DayOfWeek;
+      const daySchedule = schedule.days[dayOfWeek];
+      if (daySchedule && daySchedule.enabled) {
+        const slotStart = createDateInTimezone(curDate, daySchedule.start, timeZone);
+        const slotEnd = createDateInTimezone(curDate, daySchedule.end, timeZone);
+        normalized.push({
+          ...evt,
+          id: `${evt.id}_${curDate}`,
+          start: slotStart.toISOString(),
+          end: slotEnd.toISOString(),
+          isAllDay: true,
+        });
+      }
+      curDate = addDaysToDateStr(curDate, 1);
+      guard++;
+    }
+  }
+
+  return normalized;
 }
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
@@ -305,50 +455,13 @@ export function calculateAvailability(
     }
   }
 
-  const currentDay = zoned.dayOfWeek;
-  const currentMinutes = zoned.hour * 60 + zoned.minute;
-  const daySchedule = schedule.days[currentDay];
-
-  // 1. Check if today is a working day (e.g. weekend or day off)
-  if (!daySchedule || !daySchedule.enabled) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone);
-    return {
-      status: 'OFF_HOURS',
-      state: 'off',
-      badgeColor: '#64748B',
-      dotColor: '#475569',
-      title: 'Hors horaires de travail',
-      subtitle: `Reprise ${nextStart.text}`,
-      isWorkTime: false,
-      nextFreeTime: nextStart.text,
-      nextChangeDate: nextStart.date,
-    };
-  }
-
-  const startMin = parseTimeToMinutes(daySchedule.start);
-  const endMin = parseTimeToMinutes(daySchedule.end);
-
-  // 2. Check if before or after work hours
-  if (currentMinutes < startMin || currentMinutes >= endMin) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone);
-    return {
-      status: 'OFF_HOURS',
-      state: 'off',
-      badgeColor: '#64748B',
-      dotColor: '#475569',
-      title: 'Hors horaires de travail',
-      subtitle: `Reprise ${nextStart.text}`,
-      isWorkTime: false,
-      nextFreeTime: nextStart.text,
-      nextChangeDate: nextStart.date,
-    };
-  }
-
-  // 3. Within working hours: Check if currently in an active calendar appointment
+  // 1. Check active meetings FIRST (including meetings outside normal working hours/days)
+  // All-day events are normalized to working hours of enabled work days.
   const bufferMs = (schedule.bufferMinutes || 0) * 60 * 1000;
   const nowMs = now.getTime();
+  const normalizedEvents = normalizeEventsForSchedule(events, schedule, timeZone);
 
-  const sortedEvents = events
+  const sortedEvents = normalizedEvents
     .filter(e => e.isBusy !== false) // Only busy events
     .map(e => ({
       ...e,
@@ -389,10 +502,50 @@ export function calculateAvailability(
     };
   }
 
-  // 4. Check lunch break
-  if (schedule.lunchBreak.enabled) {
-    const lunchStart = parseTimeToMinutes(schedule.lunchBreak.start);
-    const lunchEnd = parseTimeToMinutes(schedule.lunchBreak.end);
+  const currentDay = zoned.dayOfWeek;
+  const currentMinutes = zoned.hour * 60 + zoned.minute;
+  const daySchedule = schedule.days[currentDay];
+
+  // 2. Check if today is a working day (e.g. weekend or day off)
+  if (!daySchedule || !daySchedule.enabled) {
+    const nextStart = getNextWorkStart(now, schedule, timeZone);
+    return {
+      status: 'OFF_HOURS',
+      state: 'off',
+      badgeColor: '#64748B',
+      dotColor: '#475569',
+      title: 'Hors horaires de travail',
+      subtitle: `Reprise ${nextStart.text}`,
+      isWorkTime: false,
+      nextFreeTime: nextStart.text,
+      nextChangeDate: nextStart.date,
+    };
+  }
+
+  const startMin = parseTimeToMinutes(daySchedule.start);
+  const endMin = parseTimeToMinutes(daySchedule.end);
+
+  // 3. Check if before or after work hours
+  if (currentMinutes < startMin || currentMinutes >= endMin) {
+    const nextStart = getNextWorkStart(now, schedule, timeZone);
+    return {
+      status: 'OFF_HOURS',
+      state: 'off',
+      badgeColor: '#64748B',
+      dotColor: '#475569',
+      title: 'Hors horaires de travail',
+      subtitle: `Reprise ${nextStart.text}`,
+      isWorkTime: false,
+      nextFreeTime: nextStart.text,
+      nextChangeDate: nextStart.date,
+    };
+  }
+
+  // 4. Check lunch break (day-specific override takes priority over global lunchBreak)
+  const effectiveLunch = getEffectiveLunchBreak(schedule, currentDay);
+  if (effectiveLunch.enabled) {
+    const lunchStart = parseTimeToMinutes(effectiveLunch.start);
+    const lunchEnd = parseTimeToMinutes(effectiveLunch.end);
     if (currentMinutes >= lunchStart && currentMinutes < lunchEnd) {
       const lunchEndDate = new Date(now);
       return {
@@ -400,7 +553,7 @@ export function calculateAvailability(
         state: 'away',
         badgeColor: '#F59E0B',
         dotColor: '#D97706',
-        title: schedule.lunchBreak.label || 'Pause déjeuner',
+        title: effectiveLunch.label,
         subtitle: `Reprise à ${formatMinutesToTime(lunchEnd)}`,
         isWorkTime: false,
         nextFreeTime: formatMinutesToTime(lunchEnd),
@@ -415,8 +568,8 @@ export function calculateAvailability(
   let nextChangeDate: Date | undefined;
 
   // Next change could be lunch break if before lunch
-  if (schedule.lunchBreak.enabled) {
-    const lunchStart = parseTimeToMinutes(schedule.lunchBreak.start);
+  if (effectiveLunch.enabled) {
+    const lunchStart = parseTimeToMinutes(effectiveLunch.start);
     if (currentMinutes < lunchStart) {
       availableUntilText = `Jusqu'à ${formatMinutesToTime(lunchStart)} (pause)`;
       const lunchDate = new Date(now);
@@ -436,8 +589,9 @@ export function calculateAvailability(
       nextEventZoned.month === zoned.month &&
       nextEventZoned.day === zoned.day;
     if (isToday) {
-      const lunchStart = schedule.lunchBreak.enabled ? parseTimeToMinutes(schedule.lunchBreak.start) : 9999;
-      if (eventMinutes < lunchStart || currentMinutes >= parseTimeToMinutes(schedule.lunchBreak.end)) {
+      const lunchStart = effectiveLunch.enabled ? parseTimeToMinutes(effectiveLunch.start) : 9999;
+      const lunchEnd = effectiveLunch.enabled ? parseTimeToMinutes(effectiveLunch.end) : -1;
+      if (eventMinutes < lunchStart || currentMinutes >= lunchEnd) {
         availableUntilText = `Jusqu'à ${eventTimeStr}`;
         nextChangeDate = nextEvent.startDate;
       }
@@ -465,11 +619,14 @@ export function calculateAvailability(
 export function getAnonymizedUpcomingSlots(
   events: CalendarEvent[],
   fromDate: Date = new Date(),
-  maxSlots = 8
+  maxSlots = 8,
+  schedule: ScheduleConfig = DEFAULT_SCHEDULE,
+  timeZone: string = schedule.timezone || 'Europe/Paris'
 ): AnonymizedSlot[] {
   const fromMs = fromDate.getTime();
+  const normalizedEvents = normalizeEventsForSchedule(events, schedule, timeZone);
 
-  const validEvents = events
+  const validEvents = normalizedEvents
     .filter(evt => {
       if (evt.isBusy === false) return false;
       const endMs = new Date(evt.end).getTime();

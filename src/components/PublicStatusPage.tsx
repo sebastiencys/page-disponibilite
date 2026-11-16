@@ -16,6 +16,7 @@ import {
 import {
   calculateAvailability,
   getZonedDateParts,
+  getEffectiveLunchBreak,
   formatTimeShort,
   type AvailabilityResult,
   type ScheduleConfig,
@@ -86,7 +87,9 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
       const startParts = getZonedDateParts(start, timezone);
       const dateKey = `${startParts.year}-${startParts.month}-${startParts.day}`;
 
-      let dayLabel = `${DAY_LABELS[startParts.dayOfWeek]} ${startParts.day}/${startParts.month}`;
+      const dayStr = String(startParts.day).padStart(2, '0');
+      const monthStr = String(startParts.month).padStart(2, '0');
+      let dayLabel = `${DAY_LABELS[startParts.dayOfWeek]} ${dayStr}/${monthStr}`;
       if (
         startParts.year === nowZoned.year &&
         startParts.month === nowZoned.month &&
@@ -94,8 +97,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
       ) {
         dayLabel = "Aujourd'hui";
       } else {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
         const tomorrowParts = getZonedDateParts(tomorrow, timezone);
         if (
           startParts.year === tomorrowParts.year &&
@@ -111,7 +113,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
       const diffMins = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
       const hours = Math.floor(diffMins / 60);
       const mins = diffMins % 60;
-      const durationStr = hours > 0 ? (mins > 0 ? `${hours}h${mins}` : `${hours}h`) : `${mins} min`;
+      const durationStr = hours > 0 ? (mins > 0 ? `${hours}h${String(mins).padStart(2, '0')}` : `${hours}h`) : `${mins} min`;
 
       let group = groups.find(g => g.dateKey === dateKey);
       if (!group) {
@@ -315,17 +317,44 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             );
           })}
         </div>
-        {schedule.lunchBreak.enabled && (
-          <div className="pt-2 text-xs text-slate-500 flex items-center gap-1.5 border-t border-slate-100">
-            <Coffee className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span>
-              {schedule.lunchBreak.label} :{' '}
-              <strong className="font-medium text-slate-700">
-                {schedule.lunchBreak.start.replace(':', 'h')} - {schedule.lunchBreak.end.replace(':', 'h')}
-              </strong>
-            </span>
-          </div>
-        )}
+        {(() => {
+          const customDays = ([1, 2, 3, 4, 5, 6, 0] as DayOfWeek[])
+            .map(d => {
+              const eff = getEffectiveLunchBreak(schedule, d);
+              return schedule.days[d]?.enabled && eff.isCustomForDay ? { day: d, eff } : null;
+            })
+            .filter(Boolean) as { day: DayOfWeek; eff: ReturnType<typeof getEffectiveLunchBreak> }[];
+
+          if (!schedule.lunchBreak.enabled && customDays.length === 0) return null;
+
+          return (
+            <div className="pt-2 text-xs text-slate-500 space-y-1 border-t border-slate-100">
+              {schedule.lunchBreak.enabled && (
+                <div className="flex items-center gap-1.5">
+                  <Coffee className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  <span>
+                    {schedule.lunchBreak.label} :{' '}
+                    <strong className="font-medium text-slate-700">
+                      {schedule.lunchBreak.start.replace(':', 'h')} - {schedule.lunchBreak.end.replace(':', 'h')}
+                    </strong>
+                  </span>
+                </div>
+              )}
+              {customDays.length > 0 && (
+                <div className="pl-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                  {customDays.map(({ day, eff }) => (
+                    <span key={day}>
+                      {DAY_LABELS[day]} :{' '}
+                      <strong className="font-medium text-slate-700">
+                        {eff.enabled ? `${eff.start.replace(':', 'h')} - ${eff.end.replace(':', 'h')}` : 'Aucune'}
+                      </strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Footer Banner */}

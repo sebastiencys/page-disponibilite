@@ -163,6 +163,7 @@ export default function App() {
             schedule={DEFAULT_SCHEDULE}
             profile={profile}
             timezone={timezone}
+            upcomingSlots={upcomingSlots}
             appBaseUrl={appBaseUrl}
             onGoToStudio={() => setCurrentTab('signature')}
           />

@@ -17,17 +17,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(204).end();
   }
 
-  const now = new Date();
+  let now = new Date();
+  const timeParam = req.query?.time;
+  if (typeof timeParam === 'string') {
+    const parsed = new Date(timeParam);
+    if (!isNaN(parsed.getTime())) now = parsed;
+  }
   const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
 
   let events: CalendarEvent[] = [];
-  const synced = await getSyncedCalendarEvents();
+  const synced = await getSyncedCalendarEvents(undefined, false, now);
   if (synced.events && synced.events.length > 0) {
     events = synced.events;
   }
 
   const avail = calculateAvailability(now, DEFAULT_SCHEDULE, events, undefined, timezone);
-  const upcomingSlots = getAnonymizedUpcomingSlots(events, now, 8);
+  const upcomingSlots = getAnonymizedUpcomingSlots(events, now, 8, DEFAULT_SCHEDULE, timezone);
 
   return res.status(200).json({
     now: now.toISOString(),

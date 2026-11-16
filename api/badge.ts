@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let override: ManualOverride = { type: 'auto' };
 
   // Fetch from secure CALENDAR_ICS_URL environment variable if set
-  const synced = await getSyncedCalendarEvents();
+  const synced = await getSyncedCalendarEvents(undefined, false, now);
   if (synced.events && synced.events.length > 0) {
     events = synced.events;
   }
