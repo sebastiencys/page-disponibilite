@@ -69,9 +69,6 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="font-semibold text-slate-900 dark:text-slate-100 text-sm sm:text-base tracking-tight truncate">
                     {profileName || DEFAULT_PROFILE.name}
                   </span>
-                  <span className="hidden sm:inline px-2 py-0.5 text-[10px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70 rounded-full shrink-0">
-                    En direct
-                  </span>
                 </div>
               </div>
             </div>
@@ -120,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
                   title="Accéder au générateur de signature et aux réglages"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                  <span className="hidden md:inline">Studio de signature</span>
+                  <span className="hidden md:inline">Paramètres</span>
                 </button>
               )}
             </div>

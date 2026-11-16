@@ -191,7 +191,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all"
             >
               <Calendar className="w-4 h-4" />
-              Réserver un créneau dans mon agenda
+              Réserver un créneau dans l'agenda
             </a>
           )}
 
@@ -201,7 +201,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
             >
               <Mail className="w-4 h-4" />
-              Lui envoyer un e-mail
+              Envoyer un e-mail
             </a>
           )}
         </div>
@@ -216,10 +216,6 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               Prochains créneaux occupés
             </h2>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
-            <Lock className="w-3 h-3 text-slate-400" />
-            <span>Agenda confidentiel • Motifs masqués</span>
-          </span>
         </div>
 
         {groupedSlots.length > 0 ? (
@@ -262,13 +258,6 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             <p className="text-slate-400 dark:text-slate-500">Les créneaux de travail habituels sont entièrement disponibles.</p>
           </div>
         )}
-
-        <div className="pt-2 text-[11px] text-slate-400 dark:text-slate-500 flex items-center gap-1.5 border-t border-slate-100 dark:border-slate-800">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-          <span>
-            Les détails des rendez-vous (intitulés, participants et lieux) restent strictement confidentiels et ne sont jamais divulgués.
-          </span>
-        </div>
       </div>
 
       {/* Working Hours Weekly Grid */}
@@ -367,7 +356,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             title="Accès protégé au Studio"
           >
             <Lock className="w-3 h-3" />
-            <span>Accès Studio</span>
+            <span>Accès Paramètres</span>
           </button>
         </div>
       )}
