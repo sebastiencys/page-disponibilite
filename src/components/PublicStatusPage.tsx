@@ -8,7 +8,6 @@ import {
   XCircle,
   Coffee,
   Moon,
-  Sparkles,
   Lock,
   ShieldCheck,
   CalendarCheck,
@@ -357,15 +356,16 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         })()}
       </div>
 
-      {/* Footer Banner */}
+      {/* Discreet owner access link */}
       {onGoToStudio && (
         <div className="text-center pt-4">
           <button
             onClick={onGoToStudio}
-            className="inline-flex items-center gap-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-600 font-medium transition-colors cursor-pointer"
+            title="Accès protégé au Studio"
           >
-            <Sparkles className="w-4 h-4" />
-            Créer votre propre signature dynamique avec DispoLive
+            <Lock className="w-3 h-3" />
+            <span>Accès Studio</span>
           </button>
         </div>
       )}

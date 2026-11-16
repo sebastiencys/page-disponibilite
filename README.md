@@ -80,5 +80,8 @@ Sur la page publique, la section **Prochains créneaux occupés** présente les 
 
 ---
 
-## TODO
-- Cacher le studio derrière un mot de passe (inscrit dans le .env)
+## 🔐 Accès protégé au Studio (`STUDIO_PASSWORD`)
+
+Le Studio (générateur de signature, simulateur, horaires & guide) est masqué sur la page publique et protégé par mot de passe dès que la variable `STUDIO_PASSWORD` est définie dans `.env` (ou dans les secrets de votre hébergeur) :
+- Les visiteurs de la page publique et les images de signature (`/api/badge.png`, `/api/badge.svg`) restent accessibles sans mot de passe.
+- L'accès au Studio via `/studio`, `?view=studio` ou le lien discret en pied de page demande le mot de passe configuré avant d'afficher l'interface d'administration.

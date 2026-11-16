@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock, Sliders } from 'lucide-react';
+import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock, Sliders, Lock } from 'lucide-react';
 import { type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
 
 interface HeaderProps {
@@ -9,6 +9,9 @@ interface HeaderProps {
   currentTimeStr: string;
   timezone?: string;
   profileName?: string;
+  studioLocked?: boolean;
+  passwordRequired?: boolean;
+  onLockStudio?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,8 +21,11 @@ export const Header: React.FC<HeaderProps> = ({
   currentTimeStr,
   timezone = 'Europe/Paris',
   profileName,
+  studioLocked = false,
+  passwordRequired = false,
+  onLockStudio,
 }) => {
-  const isPublicView = currentTab === 'public';
+  const isPublicOrLocked = currentTab === 'public' || studioLocked;
   const tzCity = timezone.split('/')[1]?.replace('_', ' ') || timezone;
 
   const tabs = [
@@ -29,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'guide', label: 'Guide & Astuces', icon: HelpCircle },
   ];
 
-  if (isPublicView) {
+  if (isPublicOrLocked) {
     return (
       <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur-md sticky top-0 z-40 shadow-xs">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -51,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {/* Right: Local time, Live Status pill & discreet Studio link */}
+            {/* Right: Local time, Live Status pill & Studio shortcut ONLY if already unlocked */}
             <div className="flex items-center gap-2.5">
               <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200">
                 <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -85,15 +91,17 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
 
-              {/* Studio configuration link */}
-              <button
-                onClick={() => onSelectTab('signature')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all cursor-pointer"
-                title="Accéder au générateur de signature et aux réglages"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                <span className="hidden md:inline">Studio de signature</span>
-              </button>
+              {/* Only show Studio shortcut in public header if already authenticated */}
+              {!studioLocked && currentTab === 'public' && (
+                <button
+                  onClick={() => onSelectTab('signature')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 rounded-lg transition-all cursor-pointer"
+                  title="Accéder au générateur de signature et aux réglages"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="hidden md:inline">Studio de signature</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -160,6 +168,17 @@ export const Header: React.FC<HeaderProps> = ({
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Voir ma page publique</span>
             </button>
+
+            {passwordRequired && onLockStudio && (
+              <button
+                onClick={onLockStudio}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-red-600 bg-slate-100 hover:bg-red-50 border border-slate-200 hover:border-red-200 rounded-lg transition-colors cursor-pointer"
+                title="Verrouiller le Studio et fermer la session"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Verrouiller</span>
+              </button>
+            )}
           </div>
         </div>
 

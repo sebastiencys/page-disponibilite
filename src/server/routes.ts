@@ -26,6 +26,14 @@ import {
   hasEnvCalendar,
   getSyncedCalendarEvents,
 } from './calendarSync.ts';
+import {
+  isStudioPasswordRequired,
+  verifyStudioPassword,
+  createStudioSessionToken,
+  isRequestStudioAuthenticated,
+  buildSessionCookieHeader,
+  buildClearSessionCookieHeader,
+} from './studioAuth.ts';
 
 export interface UserState {
   name: string;
@@ -82,12 +90,76 @@ export async function handleApiRequest(
 
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
     res.end();
+    return true;
+  }
+
+  // Studio authentication endpoint (password stored in process.env.STUDIO_PASSWORD)
+  if (pathname === '/api/studio-auth') {
+    const passwordRequired = isStudioPasswordRequired();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+
+    if (req.method === 'GET') {
+      const authenticated = isRequestStudioAuthenticated(req.headers);
+      res.statusCode = 200;
+      res.end(JSON.stringify({ passwordRequired, authenticated }));
+      return true;
+    }
+
+    if (req.method === 'DELETE') {
+      res.setHeader('Set-Cookie', buildClearSessionCookieHeader());
+      res.statusCode = 200;
+      res.end(JSON.stringify({ authenticated: false, passwordRequired }));
+      return true;
+    }
+
+    if (req.method === 'POST') {
+      if (!passwordRequired) {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ authenticated: true, passwordRequired: false, token: '' }));
+        return true;
+      }
+
+      try {
+        const bodyStr = await readBody(req);
+        const data = JSON.parse(bodyStr || '{}');
+        const candidate = typeof data.password === 'string' ? data.password : '';
+        if (!verifyStudioPassword(candidate)) {
+          res.statusCode = 401;
+          res.end(
+            JSON.stringify({
+              authenticated: false,
+              passwordRequired: true,
+              error: 'Mot de passe incorrect.',
+            })
+          );
+          return true;
+        }
+
+        const token = createStudioSessionToken();
+        res.setHeader('Set-Cookie', buildSessionCookieHeader(token));
+        res.statusCode = 200;
+        res.end(JSON.stringify({ authenticated: true, passwordRequired: true, token }));
+        return true;
+      } catch {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: 'Requête invalide' }));
+        return true;
+      }
+    }
+  }
+
+  if (pathname === '/api/studio-logout' && req.method === 'POST') {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Set-Cookie', buildClearSessionCookieHeader());
+    res.statusCode = 200;
+    res.end(JSON.stringify({ authenticated: false, passwordRequired: isStudioPasswordRequired() }));
     return true;
   }
 
@@ -105,8 +177,14 @@ export async function handleApiRequest(
     return true;
   }
 
-  // Force refresh calendar endpoint
+  // Force refresh calendar endpoint (Studio-protected when STUDIO_PASSWORD is set)
   if (pathname === '/api/calendar-refresh' && req.method === 'POST') {
+    if (!isRequestStudioAuthenticated(req.headers)) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Authentification Studio requise' }));
+      return true;
+    }
     const { events, fromCache, lastSync } = await getSyncedCalendarEvents(globalStore.icsUrl, true);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
@@ -228,6 +306,12 @@ export async function handleApiRequest(
 
   // 4. Sync client state to server store (profile is read-only from personal.json)
   if (pathname === '/api/sync' && req.method === 'POST') {
+    if (!isRequestStudioAuthenticated(req.headers)) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Authentification Studio requise' }));
+      return true;
+    }
     try {
       const bodyStr = await readBody(req);
       const data = JSON.parse(bodyStr);
@@ -250,6 +334,12 @@ export async function handleApiRequest(
 
   // 5. Fetch & parse remote iCal link
   if (pathname === '/api/fetch-ics' && req.method === 'POST') {
+    if (!isRequestStudioAuthenticated(req.headers)) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Authentification Studio requise' }));
+      return true;
+    }
     try {
       const bodyStr = await readBody(req);
       const { url } = JSON.parse(bodyStr);

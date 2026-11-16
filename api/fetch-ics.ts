@@ -1,11 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { DEFAULT_SCHEDULE } from '../src/lib/availability.ts';
 import { parseIcsEvents } from '../src/lib/icalParser.ts';
+import { isRequestStudioAuthenticated } from '../src/server/studioAuth.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -13,6 +14,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  if (!isRequestStudioAuthenticated(req.headers)) {
+    return res.status(401).json({ error: 'Authentification Studio requise' });
   }
 
   try {
