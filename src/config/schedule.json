@@ -1,0 +1,54 @@
+{
+  "timezone": "Indian/Reunion",
+  "days": {
+    "1": {
+      "enabled": false,
+      "start": "08:30",
+      "end": "17:30"
+    },
+    "2": {
+      "enabled": true,
+      "start": "08:30",
+      "end": "17:30"
+    },
+    "3": {
+      "enabled": true,
+      "start": "08:30",
+      "end": "17:30"
+    },
+    "4": {
+      "enabled": true,
+      "start": "08:30",
+      "end": "17:30"
+    },
+    "5": {
+      "enabled": true,
+      "start": "08:30",
+      "end": "17:30"
+    },
+    "6": {
+      "enabled": false,
+      "start": "08:30",
+      "end": "17:30"
+    },
+    "0": {
+      "enabled": false,
+      "start": "08:30",
+      "end": "17:30"
+    }
+  },
+  "lunchBreak": {
+    "enabled": true,
+    "start": "12:30",
+    "end": "13:30",
+    "label": "Pause déjeuner",
+    "days": {
+      "4": {
+        "enabled": true,
+        "start": "12:00",
+        "end": "13:00"
+      }
+    }
+  },
+  "bufferMinutes": 0
+}
