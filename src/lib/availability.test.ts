@@ -9,6 +9,7 @@ import {
   getZonedDateParts,
   getAnonymizedUpcomingSlots,
   getEffectiveLunchBreak,
+  getTodayAppointmentsCount,
   formatTimeShort,
   type CalendarEvent,
   type ScheduleConfig,
@@ -441,4 +442,147 @@ test('per-day lunchBreak.days override takes priority over global lunchBreak and
   const thu1245Avail = calculateAvailability(thu1245, customSchedule, [], undefined, tz);
   assert.equal(thu1245Avail.status, 'AVAILABLE');
 });
+
+test('getTodayAppointmentsCount counts only same-day busy events starting at local midnight', () => {
+  const events: CalendarEvent[] = [
+    {
+      id: 'yesterday-ends-midnight',
+      title: 'Réunion veille',
+      start: parisDate('2026-11-18T22:00:00').toISOString(),
+      end: parisDate('2026-11-19T00:00:00').toISOString(),
+      isBusy: true,
+    },
+    {
+      id: 'today-morning',
+      title: 'RDV Matin',
+      start: parisDate('2026-11-19T08:30:00').toISOString(),
+      end: parisDate('2026-11-19T09:00:00').toISOString(),
+      isBusy: true,
+    },
+    {
+      id: 'today-transparent',
+      title: 'Note libre non bloquante',
+      start: parisDate('2026-11-19T11:00:00').toISOString(),
+      end: parisDate('2026-11-19T12:00:00').toISOString(),
+      isBusy: false,
+    },
+    {
+      id: 'today-afternoon',
+      title: 'RDV Après-midi',
+      start: parisDate('2026-11-19T14:00:00').toISOString(),
+      end: parisDate('2026-11-19T15:30:00').toISOString(),
+      isBusy: true,
+    },
+    {
+      id: 'today-evening',
+      title: 'RDV Soirée',
+      start: parisDate('2026-11-19T18:30:00').toISOString(),
+      end: parisDate('2026-11-19T19:00:00').toISOString(),
+      isBusy: true,
+    },
+    {
+      id: 'tomorrow-morning',
+      title: 'RDV Demain',
+      start: parisDate('2026-11-20T09:00:00').toISOString(),
+      end: parisDate('2026-11-20T10:00:00').toISOString(),
+      isBusy: true,
+    },
+  ];
+
+  // Just before midnight on Nov 18 (23:59) -> only Nov 18 evening event (1), NOT Nov 19 events
+  const beforeMidnight = parisDate('2026-11-18T23:59:00');
+  assert.equal(getTodayAppointmentsCount(beforeMidnight, events, TEST_SCHEDULE, 'Europe/Paris'), 1);
+  assert.equal(calculateAvailability(beforeMidnight, TEST_SCHEDULE, events).todayAppointmentsCount, 1);
+
+  // Just after midnight on Nov 19 (00:01) -> 3 busy events on Nov 19 (excludes yesterday & tomorrow & transparent)
+  const afterMidnight = parisDate('2026-11-19T00:01:00');
+  assert.equal(getTodayAppointmentsCount(afterMidnight, events, TEST_SCHEDULE, 'Europe/Paris'), 3);
+  assert.equal(calculateAvailability(afterMidnight, TEST_SCHEDULE, events).todayAppointmentsCount, 3);
+
+  // Mid-afternoon on Nov 19 (15:00) -> still 3 busy events for the day
+  const afternoon = parisDate('2026-11-19T15:00:00');
+  assert.equal(calculateAvailability(afternoon, TEST_SCHEDULE, events).todayAppointmentsCount, 3);
+
+  // After midnight on Nov 20 (00:01) -> only tomorrow's (now today's) 1 event
+  const nextDayMidnight = parisDate('2026-11-20T00:01:00');
+  assert.equal(calculateAvailability(nextDayMidnight, TEST_SCHEDULE, events).todayAppointmentsCount, 1);
+});
+
+test('getTodayAppointmentsCount respects target timezone midnight and multi-day all-day events', () => {
+  const tz = 'Indian/Reunion';
+  const scheduleReunion: ScheduleConfig = { ...TEST_SCHEDULE, timezone: tz };
+  const events: CalendarEvent[] = [
+    {
+      id: 'formation-multi',
+      title: 'Formation',
+      start: createDateInTimezone('2026-11-23', '00:00', tz).toISOString(),
+      end: createDateInTimezone('2026-11-25', '00:00', tz).toISOString(),
+      isAllDay: true,
+      allDayStartDate: '2026-11-23',
+      allDayEndDate: '2026-11-25',
+      isBusy: true,
+    },
+  ];
+
+  // 19:59 UTC is 23:59 Nov 22 in Indian/Reunion -> 0 appointments on Nov 22
+  assert.equal(
+    calculateAvailability(new Date('2026-11-22T19:59:00.000Z'), scheduleReunion, events, undefined, tz)
+      .todayAppointmentsCount,
+    0
+  );
+  // 20:01 UTC is 00:01 Nov 23 in Indian/Reunion -> 1 appointment on Nov 23
+  assert.equal(
+    calculateAvailability(new Date('2026-11-22T20:01:00.000Z'), scheduleReunion, events, undefined, tz)
+      .todayAppointmentsCount,
+    1
+  );
+  // Nov 24 -> 1 appointment (all-day)
+  const nov24Avail = calculateAvailability(
+    createDateInTimezone('2026-11-24', '10:00', tz),
+    scheduleReunion,
+    events,
+    undefined,
+    tz
+  );
+  assert.equal(nov24Avail.todayAppointmentsCount, 1);
+  assert.equal(nov24Avail.todayAllDayAppointmentsCount, 1);
+
+  // Nov 25 -> 0 appointments
+  assert.equal(
+    calculateAvailability(createDateInTimezone('2026-11-25', '09:00', tz), scheduleReunion, events, undefined, tz)
+      .todayAppointmentsCount,
+    0
+  );
+});
+
+test('todayAllDayAppointmentsCount detects timed events covering the full working day and mixed days', () => {
+  const tz = 'Europe/Paris';
+  const monday = parisDate('2026-11-09T10:30:00');
+  const events: CalendarEvent[] = [
+    {
+      id: 'timed-full-workday',
+      title: 'Séminaire journée',
+      start: parisDate('2026-11-09T09:00:00').toISOString(),
+      end: parisDate('2026-11-09T18:00:00').toISOString(),
+      isBusy: true,
+    },
+    {
+      id: 'extra-meeting',
+      title: 'Point rapide',
+      start: parisDate('2026-11-09T19:00:00').toISOString(),
+      end: parisDate('2026-11-09T19:30:00').toISOString(),
+      isBusy: true,
+    },
+  ];
+
+  const availMixed = calculateAvailability(monday, TEST_SCHEDULE, events, undefined, tz);
+  assert.equal(availMixed.todayAppointmentsCount, 2);
+  assert.equal(availMixed.todayAllDayAppointmentsCount, 1);
+
+  // Single timed event covering more than workday (08:00-19:00) -> allDayCount = 1, total = 1
+  const availSingleFull = calculateAvailability(monday, TEST_SCHEDULE, [events[0]], undefined, tz);
+  assert.equal(availSingleFull.todayAppointmentsCount, 1);
+  assert.equal(availSingleFull.todayAllDayAppointmentsCount, 1);
+});
+
 

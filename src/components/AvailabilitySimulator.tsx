@@ -224,6 +224,9 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
       company: profile.company || DEFAULT_PROFILE.company,
     };
 
+    const todayCount = Math.max(0, Math.floor(simulatedAvailability.todayAppointmentsCount ?? 0));
+    const hasTodayRdvs = todayCount > 0;
+
     const pillSvg = renderBadgeSvg(simulatedAvailability, { ...opts, style: 'pill' });
     const signatureSvg = renderBadgeSvg(simulatedAvailability, { ...opts, style: 'signature' });
     const cardSvg = renderBadgeSvg(simulatedAvailability, { ...opts, style: 'card' });
@@ -233,33 +236,33 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
       {
         id: 'pill' as BadgeStyle,
         title: '1. Pill Moderne',
-        badgeType: 'Capsule 2 Lignes',
-        dimensions: '400 × 54 px',
-        description: 'Format capsule fluide affichant le statut en gras au-dessus et les détails horaires au-dessous.',
+        badgeType: hasTodayRdvs ? 'Capsule 3 Lignes' : 'Capsule 2 Lignes',
+        dimensions: hasTodayRdvs ? '400 × 70 px' : '400 × 54 px',
+        description: 'Format capsule fluide affichant le statut, l\'horaire et le nombre de RDV du jour si > 0.',
         svg: pillSvg,
       },
       {
         id: 'signature' as BadgeStyle,
         title: '2. Signature Complète',
         badgeType: 'Bannière Tout-en-un',
-        dimensions: '480 × 114 px',
-        description: 'Bannière complète intégrant avatar avec initiales, coordonnées professionnelles et cartouche de statut.',
+        dimensions: hasTodayRdvs ? '480 × 132 px' : '480 × 114 px',
+        description: 'Bannière complète intégrant avatar, coordonnées et cartouche de statut (2 ou 3 lignes).',
         svg: signatureSvg,
       },
       {
         id: 'card' as BadgeStyle,
         title: '3. Carte Compacte',
-        badgeType: 'Widget Encadré',
-        dimensions: '380 × 100 px',
-        description: 'Widget encadré élégant avec en-tête et conteneur de statut bicolore multiligne.',
+        badgeType: hasTodayRdvs ? 'Widget Encadré 3 Lignes' : 'Widget Encadré 2 Lignes',
+        dimensions: hasTodayRdvs ? '380 × 118 px' : '380 × 100 px',
+        description: 'Widget encadré élégant avec en-tête et conteneur de statut bicolore (2 ou 3 lignes).',
         svg: cardSvg,
       },
       {
         id: 'dot' as BadgeStyle,
         title: '4. Point Minimaliste',
-        badgeType: 'Pastille Discrète',
-        dimensions: '36 × 36 px',
-        description: 'Point indicateur d\'activité pulsant, ultra compact pour être placé à côté de vos coordonnées existantes.',
+        badgeType: hasTodayRdvs ? 'Pastille + Compteur RDV' : 'Pastille Discrète',
+        dimensions: hasTodayRdvs ? (todayCount >= 10 ? '44 × 38 px' : '42 × 38 px') : '36 × 36 px',
+        description: 'Point indicateur pulsant avec pastille affichant le nombre de RDV prévus le jour-même.',
         svg: dotSvg,
       },
     ];
@@ -492,6 +495,14 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             </div>
             <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
               Sous-titre affiché : <strong className="text-slate-800 dark:text-slate-100">{simulatedAvailability.subtitle}</strong>
+              {' • '}
+              <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                {(simulatedAvailability.todayAppointmentsCount ?? 0) > 0
+                  ? (simulatedAvailability.todayAllDayAppointmentsCount ?? 0) > 0
+                    ? `${simulatedAvailability.todayAppointmentsCount} RDV (${simulatedAvailability.todayAllDayAppointmentsCount === simulatedAvailability.todayAppointmentsCount ? 'journée entière' : 'dont journée entière'})`
+                    : `${simulatedAvailability.todayAppointmentsCount} RDV ce jour (badges en 3 lignes + pastille)`
+                  : '0 RDV ce jour (badges compacts à 2 lignes)'}
+              </span>
             </p>
           </div>
 

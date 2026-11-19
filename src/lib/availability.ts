@@ -83,6 +83,8 @@ export interface AvailabilityResult {
   isWorkTime: boolean;
   nextFreeTime?: string; // Formatted time
   nextChangeDate?: Date;
+  todayAppointmentsCount?: number; // Busy appointments strictly on the current local day [00:00, 24:00)
+  todayAllDayAppointmentsCount?: number; // Subset of todayAppointmentsCount lasting all day or full workday
 }
 
 export interface AnonymizedSlot {
@@ -351,6 +353,73 @@ export function normalizeEventsForSchedule(
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 
+export interface TodayAppointmentsStats {
+  total: number;
+  allDayCount: number;
+}
+
+/**
+ * Counts busy calendar appointments scheduled on the same local calendar day as `now`
+ * (from 00:00 local midnight to 00:00 the next day), and how many last all day or cover
+ * at least the configured workday hours.
+ */
+export function getTodayAppointmentsStats(
+  now: Date,
+  events: CalendarEvent[],
+  schedule: ScheduleConfig = DEFAULT_SCHEDULE,
+  timeZone: string = schedule.timezone || 'Europe/Paris',
+  preNormalizedEvents?: CalendarEvent[]
+): TodayAppointmentsStats {
+  const zoned = getZonedDateParts(now, timeZone);
+  const todayDateStr = `${zoned.year}-${String(zoned.month).padStart(2, '0')}-${String(zoned.day).padStart(2, '0')}`;
+  const tomorrowDateStr = addDaysToDateStr(todayDateStr, 1);
+
+  const dayStartMs = createDateInTimezone(todayDateStr, '00:00', timeZone).getTime();
+  const dayEndMs = createDateInTimezone(tomorrowDateStr, '00:00', timeZone).getTime();
+
+  const daySchedule = schedule.days[zoned.dayOfWeek];
+  const workStartStr = daySchedule?.start?.trim() || '09:00';
+  const workEndStr = daySchedule?.end?.trim() || '18:00';
+  const workStartMs = createDateInTimezone(todayDateStr, workStartStr, timeZone).getTime();
+  const workEndMs = createDateInTimezone(todayDateStr, workEndStr, timeZone).getTime();
+
+  const normalized = preNormalizedEvents ?? normalizeEventsForSchedule(events, schedule, timeZone);
+
+  let total = 0;
+  let allDayCount = 0;
+  for (const evt of normalized) {
+    if (evt.isBusy === false) continue;
+    const startMs = new Date(evt.start).getTime();
+    const endMs = new Date(evt.end).getTime();
+    if (isNaN(startMs) || isNaN(endMs) || endMs <= startMs) continue;
+    if (endMs > dayStartMs && startMs < dayEndMs) {
+      total++;
+      const coversFullWorkday =
+        workEndMs > workStartMs
+          ? startMs <= workStartMs && endMs >= workEndMs
+          : startMs <= dayStartMs && endMs >= dayEndMs;
+      if (evt.isAllDay || coversFullWorkday) {
+        allDayCount++;
+      }
+    }
+  }
+  return { total, allDayCount };
+}
+
+/**
+ * Counts busy calendar appointments scheduled on the same local calendar day as `now`
+ * (from 00:00 local midnight to 00:00 the next day), excluding previous and future days.
+ */
+export function getTodayAppointmentsCount(
+  now: Date,
+  events: CalendarEvent[],
+  schedule: ScheduleConfig = DEFAULT_SCHEDULE,
+  timeZone: string = schedule.timezone || 'Europe/Paris',
+  preNormalizedEvents?: CalendarEvent[]
+): number {
+  return getTodayAppointmentsStats(now, events, schedule, timeZone, preNormalizedEvents).total;
+}
+
 /**
  * Finds the next truly available working moment from a given reference date,
  * skipping disabled days, lunch breaks, and scheduled busy calendar events.
@@ -457,6 +526,16 @@ export function calculateAvailability(
 ): AvailabilityResult {
   const timeZone = timezoneOverride || schedule.timezone || 'Europe/Paris';
   const zoned = getZonedDateParts(now, timeZone);
+  const normalizedEvents = normalizeEventsForSchedule(events, schedule, timeZone);
+  const todayStats = getTodayAppointmentsStats(
+    now,
+    events,
+    schedule,
+    timeZone,
+    normalizedEvents
+  );
+  const todayAppointmentsCount = todayStats.total;
+  const todayAllDayAppointmentsCount = todayStats.allDayCount;
 
   // Check active manual override first
   if (override && override.type !== 'auto') {
@@ -472,6 +551,8 @@ export function calculateAvailability(
             title: override.note || 'Occupé',
             subtitle: override.expiresAt ? `Jusqu'à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Forcé manuellement',
             isWorkTime: true,
+            todayAppointmentsCount,
+            todayAllDayAppointmentsCount,
           };
         case 'available':
           return {
@@ -482,6 +563,8 @@ export function calculateAvailability(
             title: override.note || 'Disponible',
             subtitle: override.expiresAt ? `Jusqu'à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Mode disponible forcé',
             isWorkTime: true,
+            todayAppointmentsCount,
+            todayAllDayAppointmentsCount,
           };
         case 'break':
           return {
@@ -492,6 +575,8 @@ export function calculateAvailability(
             title: override.note || 'En pause',
             subtitle: override.expiresAt ? `Reprise à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Pause temporaire',
             isWorkTime: true,
+            todayAppointmentsCount,
+            todayAllDayAppointmentsCount,
           };
         case 'dnd':
           return {
@@ -502,6 +587,8 @@ export function calculateAvailability(
             title: override.note || 'Ne pas déranger',
             subtitle: override.expiresAt ? `Jusqu'à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Mode focus',
             isWorkTime: true,
+            todayAppointmentsCount,
+            todayAllDayAppointmentsCount,
           };
       }
     }
@@ -511,7 +598,6 @@ export function calculateAvailability(
   // All-day events are normalized to working hours of enabled work days.
   const bufferMs = (schedule.bufferMinutes || 0) * 60 * 1000;
   const nowMs = now.getTime();
-  const normalizedEvents = normalizeEventsForSchedule(events, schedule, timeZone);
 
   const sortedEvents = normalizedEvents
     .filter(e => e.isBusy !== false) // Only busy events
@@ -553,6 +639,8 @@ export function calculateAvailability(
         isWorkTime: true,
         nextFreeTime: nextStart.text,
         nextChangeDate: nextStart.date,
+        todayAppointmentsCount,
+        todayAllDayAppointmentsCount,
       };
     }
 
@@ -566,6 +654,8 @@ export function calculateAvailability(
       isWorkTime: true,
       nextFreeTime: formatTimeShort(freeTime, timeZone),
       nextChangeDate: freeTime,
+      todayAppointmentsCount,
+      todayAllDayAppointmentsCount,
     };
   }
 
@@ -586,6 +676,8 @@ export function calculateAvailability(
       isWorkTime: false,
       nextFreeTime: nextStart.text,
       nextChangeDate: nextStart.date,
+      todayAppointmentsCount,
+      todayAllDayAppointmentsCount,
     };
   }
 
@@ -605,6 +697,8 @@ export function calculateAvailability(
       isWorkTime: false,
       nextFreeTime: nextStart.text,
       nextChangeDate: nextStart.date,
+      todayAppointmentsCount,
+      todayAllDayAppointmentsCount,
     };
   }
 
@@ -625,6 +719,8 @@ export function calculateAvailability(
         isWorkTime: false,
         nextFreeTime: formatMinutesToTime(lunchEnd),
         nextChangeDate: lunchEndDate,
+        todayAppointmentsCount,
+        todayAllDayAppointmentsCount,
       };
     }
   }
@@ -675,6 +771,8 @@ export function calculateAvailability(
     isWorkTime: true,
     nextFreeTime: 'Maintenant',
     nextChangeDate,
+    todayAppointmentsCount,
+    todayAllDayAppointmentsCount,
   };
 }
 
