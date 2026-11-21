@@ -12,6 +12,7 @@ import {
   getTodayAppointmentsCount,
   getCalendarSummaries,
   getClosureForDate,
+  getUpcomingClosures,
   formatTimeShort,
   type CalendarEvent,
   type ScheduleConfig,
@@ -742,6 +743,41 @@ test('closures / holidays trigger HOLIDAY status, skip entire closure in getNext
   assert.equal(busyHoliday.status, 'BUSY');
   assert.equal(busyHoliday.subtitle, 'Libre à 10h30');
 });
+
+test('getUpcomingClosures merges contiguous days, resolves annual closures across year boundary, and respects withinDays', () => {
+  const tz = 'Europe/Paris';
+  const scheduleWithClosures: ScheduleConfig = {
+    ...TEST_SCHEDULE,
+    closures: [
+      { startDate: '2026-12-24', endDate: '2026-12-24', label: 'Congés fin année', type: 'vacation' },
+      { startDate: '12-25', label: 'Noël', type: 'holiday', annual: true },
+      { startDate: '01-01', label: 'Jour de l’an', type: 'holiday', annual: true },
+      { startDate: '2027-02-15', label: 'Trop loin', type: 'vacation' },
+    ],
+  };
+
+  // On Dec 24, 2026 with withinDays = 14: Dec 24 is current (vacation), Dec 25 is Noël, Jan 1 is Jour de l'an; Feb 15 is excluded
+  const dec24 = createDateInTimezone('2026-12-24', '10:00', tz);
+  const items = getUpcomingClosures(dec24, scheduleWithClosures, tz, 14);
+  assert.deepEqual(items, [
+    { startDate: '2026-12-24', endDate: '2026-12-24', label: 'Congés fin année', type: 'vacation', isCurrent: true },
+    { startDate: '2026-12-25', endDate: '2026-12-25', label: 'Noël', type: 'holiday', isCurrent: false },
+    { startDate: '2027-01-01', endDate: '2027-01-01', label: 'Jour de l’an', type: 'holiday', isCurrent: false },
+  ]);
+
+  // Multi-day contiguous closure collapses into a single item
+  const multiDaySchedule: ScheduleConfig = {
+    ...TEST_SCHEDULE,
+    closures: [
+      { startDate: '2026-11-10', endDate: '2026-11-12', label: 'Pont novembre', type: 'vacation' },
+    ],
+  };
+  const nov10 = createDateInTimezone('2026-11-10', '09:00', tz);
+  assert.deepEqual(getUpcomingClosures(nov10, multiDaySchedule, tz, 30), [
+    { startDate: '2026-11-10', endDate: '2026-11-12', label: 'Pont novembre', type: 'vacation', isCurrent: true },
+  ]);
+});
+
 
 
 

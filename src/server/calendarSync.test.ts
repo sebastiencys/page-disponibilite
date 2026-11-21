@@ -6,6 +6,8 @@ import {
   getEnvCalendarSources,
   formatCalendarLabel,
   validateExternalCalendarUrl,
+  getSyncedCalendarEvents,
+  clearCalendarSyncCacheForTests,
 } from './calendarSync.ts';
 
 test('hasEnvCalendar returns false when env var is not set', () => {
@@ -84,3 +86,66 @@ test('validateExternalCalendarUrl accepts https/webcal and blocks private/loopba
   assert.throws(() => validateExternalCalendarUrl('http://169.254.169.254/latest/meta-data/'));
   assert.throws(() => validateExternalCalendarUrl('file:///etc/passwd'));
 });
+
+test('getSyncedCalendarEvents coalesces concurrent cold fetches and serves subsequent calls from cache', async () => {
+  const origFetch = globalThis.fetch;
+  const origUrl = process.env.CALENDAR_ICS_URL;
+  clearCalendarSyncCacheForTests();
+
+  const sampleIcs = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'BEGIN:VEVENT',
+    'UID:coalesce-evt-1',
+    'DTSTART:20261109T090000Z',
+    'DTEND:20261109T100000Z',
+    'SUMMARY:Réunion test',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  let fetchCalls = 0;
+  let releaseFetch!: () => void;
+  const gate = new Promise<void>(resolve => {
+    releaseFetch = resolve;
+  });
+
+  globalThis.fetch = (async () => {
+    fetchCalls++;
+    await gate;
+    return new Response(sampleIcs, { status: 200, headers: { 'content-type': 'text/calendar' } });
+  }) as typeof fetch;
+
+  try {
+    process.env.CALENDAR_ICS_URL = 'https://example.com/coalesce.ics';
+    const target = new Date('2026-11-09T09:30:00Z');
+
+    // Launch two concurrent non-forced syncs while fetch is pending
+    const p1 = getSyncedCalendarEvents(undefined, false, target);
+    const p2 = getSyncedCalendarEvents(undefined, false, target);
+
+    releaseFetch();
+    const [res1, res2] = await Promise.all([p1, p2]);
+
+    assert.equal(fetchCalls, 1, 'Concurrent cold fetches should share a single upstream HTTP request');
+    assert.equal(res1.events.length, 1);
+    assert.equal(res2.events.length, 1);
+    assert.equal(res1.fromCache, false);
+    assert.equal(res2.fromCache, false);
+
+    // Subsequent call should hit in-memory cache with 0 extra fetch calls
+    const resCached = await getSyncedCalendarEvents(undefined, false, target);
+    assert.equal(fetchCalls, 1);
+    assert.equal(resCached.fromCache, true);
+    assert.equal(resCached.events.length, 1);
+  } finally {
+    globalThis.fetch = origFetch;
+    if (origUrl === undefined) {
+      delete process.env.CALENDAR_ICS_URL;
+    } else {
+      process.env.CALENDAR_ICS_URL = origUrl;
+    }
+    clearCalendarSyncCacheForTests();
+  }
+});
+

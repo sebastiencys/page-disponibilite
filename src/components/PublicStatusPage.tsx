@@ -13,10 +13,12 @@ import {
   Copy,
   Check,
   FileCode,
+  Link2,
 } from 'lucide-react';
 import {
   getZonedDateParts,
   getEffectiveLunchBreak,
+  getUpcomingClosures,
   formatTimeShort,
   type AvailabilityResult,
   type ScheduleConfig,
@@ -25,6 +27,7 @@ import {
   type CalendarSummaryItem,
 } from '../lib/availability.ts';
 import { formatTodayAppointmentsLabel } from '../lib/badgeSvg.ts';
+import { copyTextToClipboard } from '../lib/clipboard.ts';
 
 interface PublicStatusPageProps {
   profile: {
@@ -62,20 +65,34 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   onGoToStudio,
 }) => {
   const [copiedStatus, setCopiedStatus] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const todayRdvLabel = formatTodayAppointmentsLabel(
     availability.todayAppointmentsCount ?? 0,
     availability.todayAllDayAppointmentsCount ?? 0
   );
 
-  const handleCopyStatus = () => {
+  const upcomingClosures = useMemo(
+    () => getUpcomingClosures(new Date(), schedule, timezone, 30),
+    [schedule, timezone]
+  );
+
+  const handleCopyStatus = async () => {
     const parts = [`${profile.name} — ${availability.title} (${availability.subtitle})`];
     if (todayRdvLabel) {
       parts.push(todayRdvLabel);
     }
-    navigator.clipboard.writeText(parts.join(' • '));
+    await copyTextToClipboard(parts.join(' • '));
     setCopiedStatus(true);
     setTimeout(() => setCopiedStatus(false), 2000);
+  };
+
+  const handleCopyLink = async () => {
+    if (typeof window === 'undefined') return;
+    const publicUrl = `${window.location.origin}/?view=public`;
+    await copyTextToClipboard(publicUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const getStatusIcon = () => {
@@ -295,6 +312,25 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               </>
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+            title="Copier le lien de cette page publique"
+          >
+            {copiedLink ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-500" />
+                <span>Lien copié !</span>
+              </>
+            ) : (
+              <>
+                <Link2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <span>Copier le lien</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -441,6 +477,36 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             </div>
           );
         })()}
+
+        {upcomingClosures.length > 0 && (
+          <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 space-y-1.5 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-1.5 font-medium text-violet-700 dark:text-violet-300">
+              <CalendarOff className="w-3.5 h-3.5 text-violet-500 dark:text-violet-400 shrink-0" />
+              <span>Prochaines fermetures / congés (30 j) :</span>
+            </div>
+            <div className="pl-5 flex flex-wrap gap-2">
+              {upcomingClosures.map((closure, idx) => {
+                const fmt = (dStr: string) => {
+                  const [, m, d] = dStr.split('-');
+                  return `${d}/${m}`;
+                };
+                const range =
+                  closure.endDate !== closure.startDate
+                    ? `${fmt(closure.startDate)} → ${fmt(closure.endDate)}`
+                    : fmt(closure.startDate);
+                return (
+                  <span
+                    key={`${closure.startDate}-${idx}`}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/50 border border-violet-200/80 dark:border-violet-800/60 text-[11px] text-violet-900 dark:text-violet-200"
+                  >
+                    <strong className="font-mono">{range}</strong>
+                    <span>{closure.label}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Discreet owner access & JSON API footer */}

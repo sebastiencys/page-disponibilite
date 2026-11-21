@@ -17,6 +17,7 @@ import {
   MoonStar,
   CalendarCheck2,
   CalendarDays,
+  CalendarOff,
   ArrowRight,
 } from 'lucide-react';
 import {
@@ -25,6 +26,7 @@ import {
   getZonedDateParts,
   getEffectiveLunchBreak,
   getClosureForDate,
+  getUpcomingClosures,
   formatTimeShort,
   type ScheduleConfig,
   type UserProfile,
@@ -40,6 +42,7 @@ import {
   type BadgeStyle,
   type BadgeTheme,
 } from '../lib/badgeSvg.ts';
+import { copyTextToClipboard } from '../lib/clipboard.ts';
 
 interface AvailabilitySimulatorProps {
   schedule?: ScheduleConfig;
@@ -182,6 +185,17 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
     [simulatedDateStr, schedule]
   );
 
+  const firstUpcomingClosure = useMemo(() => {
+    const upcoming = getUpcomingClosures(new Date(), schedule, timezone, 365);
+    if (upcoming.length > 0) return upcoming[0];
+    const configured = schedule.closures?.[0];
+    if (!configured?.startDate) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(configured.startDate)) {
+      return { startDate: configured.startDate, label: configured.label || 'Fermeture' };
+    }
+    return null;
+  }, [schedule, timezone]);
+
   const daySchedule = schedule.days[simulatedParts.dayOfWeek];
   const dayLunchBreak = useMemo(
     () => getEffectiveLunchBreak(schedule, simulatedParts.dayOfWeek),
@@ -191,7 +205,12 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const currentDayName = dayNames[simulatedParts.dayOfWeek];
 
   // Quick preset shortcuts
-  const applyPreset = (presetType: 'morning' | 'lunch' | 'afternoon' | 'evening' | 'weekend' | 'now') => {
+  const applyPreset = (presetType: 'morning' | 'lunch' | 'afternoon' | 'evening' | 'weekend' | 'closure' | 'now') => {
+    if (presetType === 'closure' && firstUpcomingClosure) {
+      setDateStr(firstUpcomingClosure.startDate);
+      setTimeStr('10:00');
+      return;
+    }
     if (presetType === 'now') {
       const parts = getZonedDateParts(new Date(), timezone);
       const y = parts.year;
@@ -296,8 +315,8 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
     ];
   }, [simulatedAvailability, theme, profile]);
 
-  const handleCopySvg = (styleId: string, svg: string) => {
-    navigator.clipboard.writeText(svg);
+  const handleCopySvg = async (styleId: string, svg: string) => {
+    await copyTextToClipboard(svg);
     setCopiedStyle(styleId);
     setTimeout(() => setCopiedStyle(null), 2000);
   };
@@ -367,7 +386,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
           </div>
 
           {/* Theme Selector */}
-          <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
             <button
               onClick={() => setTheme('light')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
@@ -389,6 +408,16 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             >
               <Moon className="w-3.5 h-3.5 text-indigo-400" />
               <span>Sombre</span>
+            </button>
+            <button
+              onClick={() => setTheme('transparent')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                theme === 'transparent'
+                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-200 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <span>Transparent</span>
             </button>
           </div>
         </div>
@@ -465,6 +494,17 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
                 <CalendarDays className="w-3 h-3 text-purple-600 dark:text-purple-400" />
                 <span>Week-end</span>
               </button>
+              {firstUpcomingClosure && (
+                <button
+                  type="button"
+                  onClick={() => applyPreset('closure')}
+                  className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-medium bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-100 dark:hover:bg-violet-900/70 text-violet-700 dark:text-violet-300 rounded-lg transition-colors cursor-pointer"
+                  title={`Tester la fermeture : ${firstUpcomingClosure.label} (${firstUpcomingClosure.startDate})`}
+                >
+                  <CalendarOff className="w-3 h-3 text-violet-600 dark:text-violet-400" />
+                  <span>Férié / Congés</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => applyPreset('now')}
@@ -662,7 +702,11 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
                 {/* Badge SVG Visual Preview Container */}
                 <div
                   className={`p-6 rounded-xl border flex items-center justify-center min-h-[140px] transition-colors ${
-                    theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-50/70 dark:bg-slate-100 border-slate-200/80 dark:border-slate-700'
+                    theme === 'dark'
+                      ? 'bg-slate-950 border-slate-800'
+                      : theme === 'transparent'
+                      ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/70 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
+                      : 'bg-slate-50/70 dark:bg-slate-100 border-slate-200/80 dark:border-slate-700'
                   }`}
                 >
                   <div

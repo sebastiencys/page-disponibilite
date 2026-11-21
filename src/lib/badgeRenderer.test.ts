@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateAvailability, type ScheduleConfig } from './availability.ts';
-import { renderBadgeSvg, renderBadgePng, buildBadgeTextPayload } from './badgeRenderer.ts';
+import {
+  renderBadgeSvg,
+  renderBadgePng,
+  buildBadgeTextPayload,
+  normalizeBadgeStyle,
+  normalizeBadgeTheme,
+  escapeHtml,
+} from './badgeRenderer.ts';
 import { truncateBadgeText } from './badgeSvg.ts';
 
 const TEST_SCHEDULE: ScheduleConfig = {
@@ -324,4 +331,42 @@ test('truncateBadgeText prevents text overflow inside fixed-width pill, card, an
   assert.ok(!cardSvg.includes('De La Rochefoucauld'));
   assert.ok(cardSvg.includes('…'));
 });
+
+test('escapeHtml, normalizeBadgeStyle, and normalizeBadgeTheme sanitize and normalize inputs safely', () => {
+  assert.equal(
+    escapeHtml(`<script>alert("x&'y")</script>`),
+    '&lt;script&gt;alert(&quot;x&amp;&#39;y&quot;)&lt;/script&gt;'
+  );
+
+  assert.equal(normalizeBadgeStyle('CARD'), 'card');
+  assert.equal(normalizeBadgeStyle(' dot '), 'dot');
+  assert.equal(normalizeBadgeStyle('unknown-style'), 'pill');
+  assert.equal(normalizeBadgeStyle(undefined), 'pill');
+
+  assert.equal(normalizeBadgeTheme('DARK'), 'dark');
+  assert.equal(normalizeBadgeTheme('Transparent'), 'transparent');
+  assert.equal(normalizeBadgeTheme('neon'), 'light');
+  assert.equal(normalizeBadgeTheme(null), 'light');
+});
+
+test('renderBadgeSvg and renderBadgePng support transparent theme and fallback invalid style to pill', () => {
+  const now = new Date('2026-11-09T10:15:00+01:00');
+  const avail = calculateAvailability(now, TEST_SCHEDULE, []);
+
+  // Unknown style passes through normalizeBadgeStyle -> pill (width 400, NOT signature width 480)
+  const fallbackSvg = renderBadgeSvg(avail, { style: 'not-a-style' as any, theme: 'transparent' });
+  assert.ok(fallbackSvg.includes('width="400"'));
+  assert.ok(!fallbackSvg.includes('width="480"'));
+  assert.ok(fallbackSvg.includes('fill="none"'));
+
+  // Transparent card & signature keep transparent background fill="none" and PNG still rasterizes cleanly
+  const cardTransparent = renderBadgeSvg(avail, { style: 'card', theme: 'transparent', name: 'A & B <Corp>' });
+  assert.ok(cardTransparent.includes('fill="none"'));
+  assert.ok(cardTransparent.includes('A &amp; B &lt;Corp&gt;'));
+
+  const transparentPng = renderBadgePng(avail, { style: 'pill', theme: 'transparent' });
+  assert.ok(Buffer.isBuffer(transparentPng));
+  assert.ok(transparentPng.length > 100);
+});
+
 

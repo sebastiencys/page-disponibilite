@@ -1003,3 +1003,61 @@ export function getCalendarSummaries(
 
   return summaries;
 }
+
+export interface UpcomingClosureItem {
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string;   // "YYYY-MM-DD" (inclusive)
+  label: string;
+  type: 'holiday' | 'vacation';
+  isCurrent: boolean;
+}
+
+/**
+ * Resolves active or upcoming closure periods within the next `withinDays` days (inclusive),
+ * expanding annual rules onto the matching calendar dates cleanly in `timeZone`.
+ */
+export function getUpcomingClosures(
+  now: Date,
+  schedule: ScheduleConfig = DEFAULT_SCHEDULE,
+  timeZone: string = schedule.timezone || 'Europe/Paris',
+  withinDays: number = 30
+): UpcomingClosureItem[] {
+  if (!Array.isArray(schedule.closures) || schedule.closures.length === 0) {
+    return [];
+  }
+
+  const todayStr = formatZonedDateStr(now, timeZone);
+  const results: UpcomingClosureItem[] = [];
+  let activeRun: UpcomingClosureItem | null = null;
+
+  for (let offset = 0; offset <= withinDays; offset++) {
+    const dayStr = addDaysToDateStr(todayStr, offset);
+    const match = getClosureForDate(dayStr, schedule);
+    if (match) {
+      const label = match.label?.trim() || (match.type === 'vacation' ? 'Congés' : 'Jour férié');
+      const type: 'holiday' | 'vacation' = match.type === 'vacation' ? 'vacation' : 'holiday';
+      if (
+        activeRun &&
+        activeRun.label === label &&
+        activeRun.type === type &&
+        addDaysToDateStr(activeRun.endDate, 1) === dayStr
+      ) {
+        activeRun.endDate = dayStr;
+      } else {
+        activeRun = {
+          startDate: dayStr,
+          endDate: dayStr,
+          label,
+          type,
+          isCurrent: offset === 0,
+        };
+        results.push(activeRun);
+      }
+    } else {
+      activeRun = null;
+    }
+  }
+
+  return results;
+}
+

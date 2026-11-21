@@ -39,9 +39,23 @@ interface CacheEntry {
 }
 
 const memoryCacheMap = new Map<string, CacheEntry>();
+const inFlightSyncs = new Map<
+  string,
+  Promise<{
+    entry: CacheEntry | null;
+    ok: boolean;
+    fromCache: boolean;
+    fetchedAt: number | null;
+  }>
+>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache to avoid rate-limiting
 const DEFAULT_PAST_MS = 7 * 86400000;
 const DEFAULT_FUTURE_MS = 90 * 86400000;
+
+export function clearCalendarSyncCacheForTests(): void {
+  memoryCacheMap.clear();
+  inFlightSyncs.clear();
+}
 
 /**
  * Converts an env var suffix like "PRO", "PERSO", or "CABINET_SUD" into a readable label ("Pro", "Perso", "Cabinet Sud").
@@ -220,101 +234,116 @@ async function syncSingleSource(
     };
   }
 
+  const existingInFlight = !forceRefresh ? inFlightSyncs.get(cacheKey) : undefined;
+  const syncPromise =
+    existingInFlight ??
+    (async () => {
+      try {
+        const fetchUrl = source.url.trim().replace(/^webcal:\/\//i, 'https://');
+        const parsedUrl = new URL(fetchUrl);
+        if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+          throw new Error("Protocole d'URL iCal non supporté");
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+
+        const res = await fetch(parsedUrl.toString(), {
+          signal: controller.signal,
+          cache: 'no-store',
+          headers: {
+            'User-Agent': 'DispoLive-Calendar-Sync/1.0',
+            'Cache-Control': 'no-cache, no-store',
+            Pragma: 'no-cache',
+          },
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          throw new Error(`Erreur HTTP ${res.status}: ${res.statusText}`);
+        }
+
+        const icsText = await res.text();
+        const nowDate = new Date(now);
+        const parsed = parseIcsEvents(icsText, timezone, { now: nowDate });
+
+        const entry: CacheEntry = {
+          events: parsed,
+          icsText,
+          windowStartMs: now - DEFAULT_PAST_MS,
+          windowEndMs: now + DEFAULT_FUTURE_MS,
+          fetchedAt: now,
+          url: source.url,
+          timezone,
+          id: source.id,
+          label: source.label,
+          hasExplicitLabel: source.hasExplicitLabel,
+        };
+        memoryCacheMap.set(cacheKey, entry);
+
+        return { entry, ok: true, fromCache: false, fetchedAt: now };
+      } catch (err: any) {
+        console.warn(`[DispoLive] Error syncing calendar (${source.envVar}):`, err.message);
+        if (cached && cached.url === source.url) {
+          const staleEntry: CacheEntry = {
+            ...cached,
+            label: source.label,
+            hasExplicitLabel: source.hasExplicitLabel,
+          };
+          return { entry: staleEntry, ok: false, fromCache: true, fetchedAt: cached.fetchedAt };
+        }
+        return { entry: null, ok: false, fromCache: false, fetchedAt: null };
+      }
+    })();
+
+  if (!existingInFlight) {
+    inFlightSyncs.set(cacheKey, syncPromise);
+  }
+
+  let syncResult: {
+    entry: CacheEntry | null;
+    ok: boolean;
+    fromCache: boolean;
+    fetchedAt: number | null;
+  };
   try {
-    const fetchUrl = source.url.trim().replace(/^webcal:\/\//i, 'https://');
-    const parsedUrl = new URL(fetchUrl);
-    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-      throw new Error('Protocole d\'URL iCal non supporté');
+    syncResult = await syncPromise;
+  } finally {
+    if (inFlightSyncs.get(cacheKey) === syncPromise) {
+      inFlightSyncs.delete(cacheKey);
     }
+  }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
-    const res = await fetch(parsedUrl.toString(), {
-      signal: controller.signal,
-      cache: 'no-store',
-      headers: {
-        'User-Agent': 'DispoLive-Calendar-Sync/1.0',
-        'Cache-Control': 'no-cache, no-store',
-        'Pragma': 'no-cache',
-      },
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) {
-      throw new Error(`Erreur HTTP ${res.status}: ${res.statusText}`);
-    }
-
-    const icsText = await res.text();
-    const nowDate = new Date(now);
-    const parsed = parseIcsEvents(icsText, timezone, { now: nowDate });
-
-    const entry: CacheEntry = {
-      events: parsed,
-      icsText,
-      windowStartMs: now - DEFAULT_PAST_MS,
-      windowEndMs: now + DEFAULT_FUTURE_MS,
-      fetchedAt: now,
-      url: source.url,
-      timezone,
-      id: source.id,
-      label: source.label,
-      hasExplicitLabel: source.hasExplicitLabel,
-    };
-    memoryCacheMap.set(cacheKey, entry);
-
-    const events = getEventsForTargetTime(entry, targetTime);
+  if (syncResult.entry) {
+    const events = getEventsForTargetTime(syncResult.entry, targetTime);
     return {
       events,
-      fetchedAt: now,
+      fetchedAt: syncResult.fetchedAt,
       info: {
         id: source.id,
         label: source.label,
         envVar: source.envVar,
         eventCount: events.length,
-        fromCache: false,
-        lastSync: new Date(now).toISOString(),
-        ok: true,
-      },
-    };
-  } catch (err: any) {
-    console.warn(`[DispoLive] Error syncing calendar (${source.envVar}):`, err.message);
-    if (cached && cached.url === source.url) {
-      const staleEntry: CacheEntry = {
-        ...cached,
-        label: source.label,
-        hasExplicitLabel: source.hasExplicitLabel,
-      };
-      const events = getEventsForTargetTime(staleEntry, targetTime);
-      return {
-        events,
-        fetchedAt: cached.fetchedAt,
-        info: {
-          id: source.id,
-          label: source.label,
-          envVar: source.envVar,
-          eventCount: events.length,
-          fromCache: true,
-          lastSync: new Date(cached.fetchedAt).toISOString(),
-          ok: false,
-        },
-      };
-    }
-
-    return {
-      events: [],
-      fetchedAt: null,
-      info: {
-        id: source.id,
-        label: source.label,
-        envVar: source.envVar,
-        eventCount: 0,
-        fromCache: false,
-        lastSync: null,
-        ok: false,
+        fromCache: syncResult.fromCache,
+        lastSync: syncResult.fetchedAt !== null ? new Date(syncResult.fetchedAt).toISOString() : null,
+        ok: syncResult.ok,
       },
     };
   }
+
+  return {
+    events: [],
+    fetchedAt: null,
+    info: {
+      id: source.id,
+      label: source.label,
+      envVar: source.envVar,
+      eventCount: 0,
+      fromCache: false,
+      lastSync: null,
+      ok: false,
+    },
+  };
 }
 
 /**

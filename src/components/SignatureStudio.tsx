@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { type AvailabilityResult, DEFAULT_PROFILE, DEFAULT_SCHEDULE } from '../lib/availability.ts';
 import type { BadgeStyle, BadgeTheme } from '../lib/badgeRenderer.ts';
+import { escapeHtml } from '../lib/badgeSvg.ts';
+import { copyTextToClipboard } from '../lib/clipboard.ts';
 import {
   AUTO_REFRESH_OPTIONS,
   AUTO_REFRESH_STORAGE_KEY,
@@ -202,7 +204,17 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       ? "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Helvetica, Arial, sans-serif"
       : "Roboto, Arial, sans-serif";
 
-    const badgeSrc = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}`;
+    const rawName = profile.name || DEFAULT_PROFILE.name;
+    const rawRole = profile.role || '';
+    const rawCompany = profile.company || '';
+    const safeName = escapeHtml(rawName);
+    const safeRole = escapeHtml(rawRole);
+    const safeCompany = escapeHtml(rawCompany);
+    const safeBookingUrl = profile.bookingUrl ? escapeHtml(profile.bookingUrl) : '';
+    const safePublicUrl = escapeHtml(publicPageUrl);
+
+    const badgeSrc = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(rawName)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}`;
+    const safeBadgeSrc = escapeHtml(badgeSrc);
 
     // Style 1: Signature Complète (All-in-one banner 480x114 or 480x132 with RDV line)
     if (badgeStyle === 'signature') {
@@ -210,16 +222,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   <tr>
     <td style="padding-top: 4px; padding-bottom: 8px;">
       <!-- DISPOLIVE BANNIÈRE SIGNATURE COMPLÈTE -->
-      <a href="${publicPageUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
-        <img src="${badgeSrc}" alt="Signature et disponibilité en direct de ${profile.name}" width="480" style="display: block; border: 0; outline: none; border-radius: 14px; max-width: 100%; height: auto;" />
+      <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
+        <img src="${safeBadgeSrc}" alt="Signature et disponibilité en direct de ${safeName}" width="480" style="display: block; border: 0; outline: none; border-radius: 14px; max-width: 100%; height: auto;" />
       </a>
     </td>
   </tr>
   ${
-    profile.bookingUrl
+    safeBookingUrl
       ? `<tr>
     <td style="font-size: 12px; color: #4f46e5; padding-top: 4px;">
-      <a href="${profile.bookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
+      <a href="${safeBookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
         📅 Prendre rendez-vous directement
       </a>
     </td>
@@ -234,8 +246,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       return `<table cellpadding="0" cellspacing="0" border="0" style="font-family: ${fontFamily}; font-size: 14px; line-height: 1.4; color: #1e293b;">
   <tr>
     <td style="padding-bottom: 6px;">
-      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${profile.name || DEFAULT_PROFILE.name}</span>
-      ${profile.role ? `<br /><span style="font-size: 13px; color: #64748b;">${profile.role}${profile.company ? ` • ${profile.company}` : ''}</span>` : ''}
+      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${safeName}</span>
+      ${safeRole ? `<br /><span style="font-size: 13px; color: #64748b;">${safeRole}${safeCompany ? ` • ${safeCompany}` : ''}</span>` : ''}
     </td>
   </tr>
   <tr>
@@ -244,12 +256,12 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       <table cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td valign="middle" style="vertical-align: middle; padding-right: 8px;">
-            <a href="${publicPageUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
-              <img src="${badgeSrc}" alt="Statut en direct" height="36" style="display: block; border: 0; outline: none; height: 36px; width: auto;" />
+            <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
+              <img src="${safeBadgeSrc}" alt="Statut en direct" height="36" style="display: block; border: 0; outline: none; height: 36px; width: auto;" />
             </a>
           </td>
           <td valign="middle" style="vertical-align: middle; font-size: 12px; color: #475569;">
-            <a href="${publicPageUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">
+            <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">
               <strong style="color: #0f172a;">Disponibilité en temps réel</strong> (cliquez pour voir l'agenda)
             </a>
           </td>
@@ -258,10 +270,10 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     </td>
   </tr>
   ${
-    profile.bookingUrl
+    safeBookingUrl
       ? `<tr>
     <td style="font-size: 12px; color: #4f46e5; padding-top: 2px;">
-      <a href="${profile.bookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
+      <a href="${safeBookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
         📅 Prendre rendez-vous directement
       </a>
     </td>
@@ -277,23 +289,23 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     return `<table cellpadding="0" cellspacing="0" border="0" style="font-family: ${fontFamily}; font-size: 14px; line-height: 1.4; color: #1e293b; max-width: ${imgWidth}px; width: 100%;">
   <tr>
     <td style="padding-bottom: 8px;">
-      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${profile.name || DEFAULT_PROFILE.name}</span>
-      ${profile.role ? `<br /><span style="font-size: 13px; color: #64748b;">${profile.role}${profile.company ? ` • ${profile.company}` : ''}</span>` : ''}
+      <span style="font-size: 16px; font-weight: 700; color: #0f172a;">${safeName}</span>
+      ${safeRole ? `<br /><span style="font-size: 13px; color: #64748b;">${safeRole}${safeCompany ? ` • ${safeCompany}` : ''}</span>` : ''}
     </td>
   </tr>
   <tr>
     <td style="padding-top: 4px; padding-bottom: 10px;">
       <!-- DISPOLIVE BADGE ${isCard ? 'CARTE COMPACTE' : 'PILL MODERNE'} -->
-      <a href="${publicPageUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
-        <img src="${badgeSrc}" alt="Disponibilité en direct de ${profile.name}" width="${imgWidth}" style="display: block; border: 0; outline: none; max-width: 100%; height: auto;" />
+      <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
+        <img src="${safeBadgeSrc}" alt="Disponibilité en direct de ${safeName}" width="${imgWidth}" style="display: block; border: 0; outline: none; max-width: 100%; height: auto;" />
       </a>
     </td>
   </tr>
   ${
-    profile.bookingUrl
+    safeBookingUrl
       ? `<tr>
     <td style="font-size: 12px; color: #4f46e5;">
-      <a href="${profile.bookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
+      <a href="${safeBookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
         📅 Prendre rendez-vous directement
       </a>
     </td>
@@ -304,11 +316,12 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   };
 
   const generateMarkdownSnippet = () => {
-    return `[![Disponibilité de ${profile.name}](${badgeUrl})](${publicPageUrl})`;
+    const cleanName = (profile.name || DEFAULT_PROFILE.name).replace(/[\[\]]/g, '');
+    return `[![Disponibilité de ${cleanName}](${badgeUrl})](${publicPageUrl})`;
   };
 
-  const handleCopyCode = (content: string, type: string) => {
-    navigator.clipboard.writeText(content);
+  const handleCopyCode = async (content: string, type: string) => {
+    await copyTextToClipboard(content);
     setCopiedFormat(type);
     setTimeout(() => setCopiedFormat(null), 2500);
   };
@@ -526,15 +539,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
                 Thème de fond
               </label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { id: 'light', label: 'Clair (Standard e-mail)' },
+                  { id: 'light', label: 'Clair' },
                   { id: 'dark', label: 'Sombre' },
+                  { id: 'transparent', label: 'Transparent' },
                 ].map(t => (
                   <button
                     key={t.id}
                     onClick={() => setBadgeTheme(t.id as BadgeTheme)}
-                    className={`flex-1 py-2 px-3 text-xs rounded-lg border font-medium cursor-pointer transition-all ${
+                    className={`py-2 px-3 text-xs rounded-lg border font-medium cursor-pointer transition-all ${
                       badgeTheme === t.id
                         ? 'border-slate-900 dark:border-indigo-500 bg-slate-900 dark:bg-indigo-600 text-white'
                         : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
@@ -782,6 +796,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   className={`p-4 rounded-xl transition-all ${
                     badgeTheme === 'dark'
                       ? 'bg-slate-950 border border-slate-800'
+                      : badgeTheme === 'transparent'
+                      ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border border-dashed border-slate-300 dark:border-slate-600'
                       : emailClientTab === 'outlook'
                       ? 'bg-blue-50/30 dark:bg-slate-800/70 border border-blue-200/80 dark:border-slate-700'
                       : emailClientTab === 'apple'
@@ -817,6 +833,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       <div className={`my-1.5 flex items-center gap-3 p-2.5 rounded-lg border w-fit shadow-xs ${
                         badgeTheme === 'dark'
                           ? 'bg-slate-900 border-slate-700'
+                          : badgeTheme === 'transparent'
+                          ? 'bg-white/70 border-slate-300 dark:border-slate-600'
                           : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
                       }`}>
                         <img
@@ -1114,6 +1132,36 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   Renvoie en temps réel le statut anonymisé et les lignes de texte des badges (<code className="font-mono text-slate-700 dark:text-slate-300">title</code>, <code className="font-mono text-slate-700 dark:text-slate-300">subtitle</code>, <code className="font-mono text-slate-700 dark:text-slate-300">appointmentsLabel</code>, <code className="font-mono text-slate-700 dark:text-slate-300">lines</code>, <code className="font-mono text-slate-700 dark:text-slate-300">text</code>, <code className="font-mono text-slate-700 dark:text-slate-300">todayAppointmentsCount</code>) pour scripts, raccourcis ou widgets.
                 </p>
               </div>
+
+              {/* Option E: Public Status Page Link */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400" />
+                    Option 5 : Lien de votre page publique
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyCode(publicPageUrl, 'publicUrl')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer shadow-xs transition-all shrink-0"
+                  >
+                    {copiedFormat === 'publicUrl' ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Lien public copié !
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        Copier le lien public
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200 dark:border-slate-800">
+                  {publicPageUrl}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1172,7 +1220,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               Capsule aérée sur 2 lignes (3 lignes dès qu&apos;un RDV est prévu le jour-même). Idéal sous vos coordonnées textuelles.
             </p>
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[70px] ${
-              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+              badgeTheme === 'dark'
+                ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent'
+                ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
+                : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
                 src={buildBadgePreviewUrl(
@@ -1221,7 +1273,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               Bannière complète intégrant avatar avec initiales, nom, poste/entreprise et boîte de statut (2 ou 3 lignes avec le nombre de RDV du jour).
             </p>
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[120px] ${
-              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+              badgeTheme === 'dark'
+                ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent'
+                ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
+                : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
                 src={buildBadgePreviewUrl(
@@ -1270,7 +1326,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               Widget encadré élégant avec votre nom en haut et encart de statut sur 2 lignes (3 lignes avec les RDV du jour).
             </p>
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[110px] ${
-              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+              badgeTheme === 'dark'
+                ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent'
+                ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
+                : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
                 src={buildBadgePreviewUrl(
@@ -1319,7 +1379,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               Rond discret avec halo lumineux pulsant et petite pastille affichant le nombre de RDV prévus le jour-même (dès qu&apos;il y en a au moins 1).
             </p>
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[60px] ${
-              badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
+              badgeTheme === 'dark'
+                ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent'
+                ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
+                : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
                 src={buildBadgePreviewUrl(

@@ -12,9 +12,9 @@ import {
   renderBadgeSvg,
   renderBadgePng,
   buildBadgeTextPayload,
+  normalizeBadgeStyle,
+  normalizeBadgeTheme,
   ensureFontsLoaded,
-  type BadgeStyle,
-  type BadgeTheme,
 } from '../src/lib/badgeRenderer.ts';
 import { getSyncedCalendarEvents } from '../src/server/calendarSync.ts';
 
@@ -23,15 +23,15 @@ const defaultEvents: CalendarEvent[] = [];
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
 
   const query = req.query || {};
-  const style = (query.style as BadgeStyle) || 'pill';
-  const theme = (query.theme as BadgeTheme) || 'light';
+  const style = normalizeBadgeStyle(query.style, 'pill');
+  const theme = normalizeBadgeTheme(query.theme, 'light');
   const sanitizeField = (val: unknown, fallback: string) => {
     if (typeof val !== 'string') return fallback;
     const trimmed = val.trim();
@@ -48,6 +48,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     else if (req.url?.includes('.svg')) format = 'svg';
     else if (req.url?.includes('.png')) format = 'png';
     else format = 'png'; // default to PNG for email signatures
+  }
+
+  // Set aggressive anti-cache headers for email clients
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  if (req.method === 'HEAD') {
+    if (format === 'json') res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    else if (format === 'svg') res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    else res.setHeader('Content-Type', 'image/png');
+    return res.status(200).end();
   }
 
   let now = new Date();
@@ -70,11 +82,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Calculate live availability (automatic truthful calendar & schedule evaluation)
   const timezone = process.env.TIMEZONE || schedule.timezone || 'Europe/Paris';
   const avail = calculateAvailability(now, schedule, events, override, timezone);
-
-  // Set aggressive anti-cache headers for email clients
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
 
   if (format === 'json') {
     const calendarSummaries = getCalendarSummaries(

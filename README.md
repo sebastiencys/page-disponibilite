@@ -158,7 +158,7 @@ Toutes les routes publiques de badges sont accessibles sans authentification, av
 | Paramètre | Routes concernées | Valeurs possibles | Défaut | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `style` | SVG, PNG | `pill`, `card`, `signature`, `dot` | `pill` | Choisit la variante visuelle (voir dimensions ci-dessous) |
-| `theme` | SVG, PNG | `light`, `dark` | `light` | Palette claire (fond blanc) ou sombre (fond `#0f172a`) |
+| `theme` | SVG, PNG | `light`, `dark`, `transparent` | `light` | Palette claire (fond blanc), sombre (`#0f172a`) ou fond transparent |
 | `time` | SVG, PNG, JSON | Date ISO 8601 (ex. `2026-11-23T10:00:00%2B04:00`) | *Maintenant* | Évalue et rend le statut à une date/heure précise (simulation) |
 | `name` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge le nom affiché sur le badge / dans le JSON |
 | `role` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge le poste / spécialité |

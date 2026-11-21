@@ -64,6 +64,18 @@ export interface BadgeTextPayload {
 }
 
 /**
+ * Escapes XML/SVG/HTML special characters safely.
+ */
+export function escapeHtml(unsafe: string): string {
+  return (unsafe || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Escapes XML/SVG special characters
  */
 function escapeXml(unsafe: string): string {
@@ -73,6 +85,35 @@ function escapeXml(unsafe: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+const VALID_BADGE_STYLES: ReadonlySet<string> = new Set(['pill', 'dot', 'card', 'signature']);
+const VALID_BADGE_THEMES: ReadonlySet<string> = new Set(['light', 'dark', 'transparent']);
+
+/**
+ * Normalizes any style query parameter to a valid BadgeStyle (defaults safely to 'pill').
+ */
+export function normalizeBadgeStyle(value: unknown, fallback: BadgeStyle = 'pill'): BadgeStyle {
+  if (typeof value === 'string') {
+    const clean = value.trim().toLowerCase();
+    if (VALID_BADGE_STYLES.has(clean)) {
+      return clean as BadgeStyle;
+    }
+  }
+  return fallback;
+}
+
+/**
+ * Normalizes any theme query parameter to a valid BadgeTheme (defaults safely to 'light').
+ */
+export function normalizeBadgeTheme(value: unknown, fallback: BadgeTheme = 'light'): BadgeTheme {
+  if (typeof value === 'string') {
+    const clean = value.trim().toLowerCase();
+    if (VALID_BADGE_THEMES.has(clean)) {
+      return clean as BadgeTheme;
+    }
+  }
+  return fallback;
 }
 
 /**
@@ -168,19 +209,19 @@ export function renderBadgeSvg(
   avail: AvailabilityResult,
   options: BadgeOptions = {}
 ): string {
-  const {
-    style = 'pill',
-    theme = 'light',
-    name = DEFAULT_PROFILE.name,
-    role = DEFAULT_PROFILE.role,
-    company = DEFAULT_PROFILE.company,
-  } = options;
+  const style = normalizeBadgeStyle(options.style, 'pill');
+  const theme = normalizeBadgeTheme(options.theme, 'light');
+  const name = options.name ?? DEFAULT_PROFILE.name;
+  const role = options.role ?? DEFAULT_PROFILE.role;
+  const company = options.company ?? DEFAULT_PROFILE.company;
 
   const isDark = theme === 'dark';
-  const bgColor = isDark ? '#0f172a' : '#ffffff';
-  const borderColor = isDark ? '#334155' : '#e2e8f0';
-  const textPrimary = isDark ? '#f8fafc' : '#0f172a';
-  const textSecondary = isDark ? '#94a3b8' : '#64748b';
+  const isTransparent = theme === 'transparent';
+  const bgColor = isTransparent ? 'none' : isDark ? '#0f172a' : '#ffffff';
+  const borderColor = isTransparent ? 'rgba(148,163,184,0.45)' : isDark ? '#334155' : '#e2e8f0';
+  const dotPillStroke = isTransparent ? '#ffffff' : bgColor;
+  const textPrimary = isTransparent ? '#334155' : isDark ? '#f8fafc' : '#0f172a';
+  const textSecondary = isTransparent ? '#64748b' : isDark ? '#94a3b8' : '#64748b';
   const countLineColor = isDark ? '#a5b4fc' : '#4338ca';
   const dotColor = avail.dotColor;
   const badgeColor = avail.badgeColor;
@@ -199,10 +240,18 @@ export function renderBadgeSvg(
   const safeTitle = escapeXml(truncateBadgeText(avail.title, titleMax));
   const safeSubtitle = escapeXml(truncateBadgeText(avail.subtitle, subMax));
   const safeName = escapeXml(truncateBadgeText(name, style === 'card' ? 24 : 30));
-  const safeRole = escapeXml(role);
-  const safeCompany = escapeXml(company);
 
   // Modern font family stack with Plus Jakarta Sans & native Apple/Windows system fonts
+  const cardBgGradient = isTransparent
+    ? `<linearGradient id="cardBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0" />
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+      </linearGradient>`
+    : `<linearGradient id="cardBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${isDark ? '#1e293b' : '#ffffff'}" />
+        <stop offset="100%" stop-color="${isDark ? '#0f172a' : '#f8fafc'}" />
+      </linearGradient>`;
+
   const fontDef = `
     <defs>
       <style>
@@ -217,10 +266,7 @@ export function renderBadgeSvg(
         <feGaussianBlur stdDeviation="3" result="blur" />
         <feComposite in="SourceGraphic" in2="blur" operator="over" />
       </filter>
-      <linearGradient id="cardBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="${isDark ? '#1e293b' : '#ffffff'}" />
-        <stop offset="100%" stop-color="${isDark ? '#0f172a' : '#f8fafc'}" />
-      </linearGradient>
+      ${cardBgGradient}
     </defs>`;
 
   // 1. STYLE: DOT (36x36 px, or 42..46 x 38 px with mini RDV counter pill when todayCount > 0)
@@ -271,7 +317,7 @@ export function renderBadgeSvg(
     <animate attributeName="opacity" values="0.35;0.08;0.35" dur="2.4s" repeatCount="indefinite" />
   </circle>
   <circle cx="18" cy="21" r="6.5" fill="${dotColor}" filter="url(#glow)"/>
-  <rect x="${pillX}" y="1" width="${pillW}" height="16" rx="8" fill="#4f46e5" stroke="${bgColor}" stroke-width="1.8"/>
+  <rect x="${pillX}" y="1" width="${pillW}" height="16" rx="8" fill="#4f46e5" stroke="${dotPillStroke}" stroke-width="1.8"/>
   <text x="${pillX + pillW / 2}" y="12.5" text-anchor="middle" font-size="${countFontSize}" font-weight="800" fill="#ffffff">${escapeXml(countText)}</text>
 </svg>`;
   }
@@ -371,7 +417,7 @@ export function renderBadgeSvg(
 
   const rawRoleText = role ? (company ? `${role} • ${company}` : role) : 'Disponibilité en direct';
   const roleText = escapeXml(truncateBadgeText(rawRoleText, 46));
-  const avatarBg = isDark ? '#1e293b' : '#f1f5f9';
+  const avatarBg = isTransparent ? 'rgba(148,163,184,0.16)' : isDark ? '#1e293b' : '#f1f5f9';
 
   const sigSvgH = hasTodayRdvs ? 132 : 114;
   const sigOuterH = sigSvgH - 2;

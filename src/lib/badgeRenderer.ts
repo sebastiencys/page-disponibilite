@@ -63,6 +63,9 @@ export async function ensureFontsLoaded(): Promise<string[]> {
 import {
   renderBadgeSvg,
   buildBadgeTextPayload,
+  normalizeBadgeStyle,
+  normalizeBadgeTheme,
+  escapeHtml,
   type BadgeStyle,
   type BadgeTheme,
   type BadgeOptions,
@@ -74,6 +77,9 @@ import {
 export {
   renderBadgeSvg,
   buildBadgeTextPayload,
+  normalizeBadgeStyle,
+  normalizeBadgeTheme,
+  escapeHtml,
   type BadgeStyle,
   type BadgeTheme,
   type BadgeOptions,

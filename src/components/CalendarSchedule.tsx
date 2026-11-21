@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
   getEffectiveLunchBreak,
+  formatTimeShort,
   type ScheduleConfig,
   type DayOfWeek,
 } from '../lib/availability.ts';
@@ -321,9 +322,15 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                             {cal.envVar}
                           </code>
                         </div>
-                        <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                          {cal.ok ? `${cal.eventCount} événements` : 'Erreur de synchro'}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                          <span>{cal.ok ? `${cal.eventCount} événements` : 'Erreur de synchro'}</span>
+                          {cal.lastSync && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                              à {formatTimeShort(new Date(cal.lastSync), schedule.timezone || 'Europe/Paris')}
+                              {cal.fromCache ? ' (cache)' : ' (live)'}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

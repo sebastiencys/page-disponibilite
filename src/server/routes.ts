@@ -19,6 +19,8 @@ import {
   renderBadgeSvg,
   renderBadgePng,
   buildBadgeTextPayload,
+  normalizeBadgeStyle,
+  normalizeBadgeTheme,
   ensureFontsLoaded,
   type BadgeStyle,
   type BadgeTheme,
@@ -67,14 +69,40 @@ export const globalStore: UserState = {
   events: [],
 };
 
-function readBody(req: IncomingMessage): Promise<string> {
+const MAX_JSON_BODY_BYTES = 64 * 1024;
+
+class PayloadTooLargeError extends Error {
+  statusCode = 413;
+  constructor() {
+    super('Requête trop volumineuse (max 64 Ko).');
+  }
+}
+
+function readBody(req: IncomingMessage, maxBytes = MAX_JSON_BODY_BYTES): Promise<string> {
   return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk;
+    let totalBytes = 0;
+    const chunks: Buffer[] = [];
+    let aborted = false;
+
+    req.on('data', (chunk: Buffer | string) => {
+      if (aborted) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, 'utf8');
+      totalBytes += buf.length;
+      if (totalBytes > maxBytes) {
+        aborted = true;
+        reject(new PayloadTooLargeError());
+        return;
+      }
+      chunks.push(buf);
     });
-    req.on('end', () => resolve(body));
-    req.on('error', reject);
+    req.on('end', () => {
+      if (!aborted) {
+        resolve(Buffer.concat(chunks).toString('utf8'));
+      }
+    });
+    req.on('error', err => {
+      if (!aborted) reject(err);
+    });
   });
 }
 
@@ -114,7 +142,7 @@ export async function handleApiRequest(
 
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
@@ -122,6 +150,8 @@ export async function handleApiRequest(
     res.end();
     return true;
   }
+
+  const isHead = req.method === 'HEAD';
 
   // Studio authentication endpoint (password stored in process.env.STUDIO_PASSWORD)
   if (pathname === '/api/studio-auth') {
@@ -200,9 +230,9 @@ export async function handleApiRequest(
         res.statusCode = 200;
         res.end(JSON.stringify({ authenticated: true, passwordRequired: true, token }));
         return true;
-      } catch {
-        res.statusCode = 400;
-        res.end(JSON.stringify({ error: 'Requête invalide' }));
+      } catch (err: any) {
+        res.statusCode = err instanceof PayloadTooLargeError ? 413 : 400;
+        res.end(JSON.stringify({ error: err instanceof PayloadTooLargeError ? err.message : 'Requête invalide' }));
         return true;
       }
     }
@@ -261,10 +291,14 @@ export async function handleApiRequest(
 
   // Healthcheck / ICS warm-up endpoint (anonymized)
   if (pathname === '/api/health') {
-    const { calendars } = await resolveCurrentCalendarState();
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    if (isHead) {
+      res.end();
+      return true;
+    }
+    const { calendars } = await resolveCurrentCalendarState();
     res.end(
       JSON.stringify({
         ok: true,
@@ -279,8 +313,24 @@ export async function handleApiRequest(
     return true;
   }
 
+  const badgeStyle = normalizeBadgeStyle(query.style, 'pill');
+  const badgeTheme = normalizeBadgeTheme(query.theme, 'light');
+  const badgeName = sanitizeQueryField(query.name, globalStore.name);
+  const badgeRole = sanitizeQueryField(query.role, globalStore.role);
+  const badgeCompany = sanitizeQueryField(query.company, globalStore.company);
+  const queryFormat = typeof query.format === 'string' ? query.format.trim().toLowerCase() : '';
+
   // 1. Dynamic SVG Badge
-  if (pathname === '/api/badge.svg' || pathname === '/badge.svg') {
+  if (
+    pathname === '/api/badge.svg' ||
+    pathname === '/badge.svg' ||
+    ((pathname === '/api/badge' || pathname === '/badge') && queryFormat === 'svg')
+  ) {
+    if (isHead) {
+      serveSvg(res, '', true);
+      return true;
+    }
+
     let now = new Date();
     if (query.time && typeof query.time === 'string') {
       const parsed = new Date(query.time);
@@ -297,54 +347,28 @@ export async function handleApiRequest(
     );
 
     const svg = renderBadgeSvg(avail, {
-      style: (query.style as BadgeStyle) || 'pill',
-      theme: (query.theme as BadgeTheme) || 'light',
-      name: (query.name as string) || globalStore.name,
-      role: (query.role as string) || globalStore.role,
-      company: (query.company as string) || globalStore.company,
+      style: badgeStyle,
+      theme: badgeTheme,
+      name: badgeName,
+      role: badgeRole,
+      company: badgeCompany,
     });
 
     serveSvg(res, svg);
     return true;
   }
 
-  // 2. Dynamic PNG Badge
-  if (pathname === '/api/badge.png' || pathname === '/badge.png') {
-    let now = new Date();
-    if (query.time && typeof query.time === 'string') {
-      const parsed = new Date(query.time);
-      if (!isNaN(parsed.getTime())) now = parsed;
-    }
-    const currentEvents = await resolveCurrentEvents(now);
-    const avail = calculateAvailability(
-      now,
-      globalStore.schedule,
-      currentEvents,
-      globalStore.override,
-      serverTimezone
-    );
-
-    await ensureFontsLoaded();
-    const png = renderBadgePng(avail, {
-      style: (query.style as BadgeStyle) || 'pill',
-      theme: (query.theme as BadgeTheme) || 'light',
-      name: (query.name as string) || globalStore.name,
-      role: (query.role as string) || globalStore.role,
-      company: (query.company as string) || globalStore.company,
-    });
-
-    servePng(res, png);
-    return true;
-  }
-
-  // 2b. Dynamic JSON Badge (text version of the badge info)
+  // 2. Dynamic JSON Badge (text version of the badge info)
   if (
     pathname === '/api/badge.json' ||
     pathname === '/badge.json' ||
-    ((pathname === '/api/badge' || pathname === '/badge') &&
-      typeof query.format === 'string' &&
-      query.format.toLowerCase() === 'json')
+    ((pathname === '/api/badge' || pathname === '/badge') && queryFormat === 'json')
   ) {
+    if (isHead) {
+      serveJson(res, null, true);
+      return true;
+    }
+
     let now = new Date();
     if (query.time && typeof query.time === 'string') {
       const parsed = new Date(query.time);
@@ -369,9 +393,9 @@ export async function handleApiRequest(
     );
 
     const payload = buildBadgeTextPayload(avail, {
-      name: sanitizeQueryField(query.name, globalStore.name),
-      role: sanitizeQueryField(query.role, globalStore.role),
-      company: sanitizeQueryField(query.company, globalStore.company),
+      name: badgeName,
+      role: badgeRole,
+      company: badgeCompany,
       timezone: serverTimezone,
       now,
       calendars: calendarSummaries,
@@ -381,8 +405,55 @@ export async function handleApiRequest(
     return true;
   }
 
-  // 3. Current Live Status (JSON) — also supports ?time=<ISO> for simulation and ?refresh=1 (Studio-authenticated)
+  // 3. Dynamic PNG Badge (also default when calling /api/badge without extension)
+  if (
+    pathname === '/api/badge.png' ||
+    pathname === '/badge.png' ||
+    pathname === '/api/badge' ||
+    pathname === '/badge'
+  ) {
+    if (isHead) {
+      servePng(res, Buffer.alloc(0), true);
+      return true;
+    }
+
+    let now = new Date();
+    if (query.time && typeof query.time === 'string') {
+      const parsed = new Date(query.time);
+      if (!isNaN(parsed.getTime())) now = parsed;
+    }
+    const currentEvents = await resolveCurrentEvents(now);
+    const avail = calculateAvailability(
+      now,
+      globalStore.schedule,
+      currentEvents,
+      globalStore.override,
+      serverTimezone
+    );
+
+    await ensureFontsLoaded();
+    const png = renderBadgePng(avail, {
+      style: badgeStyle,
+      theme: badgeTheme,
+      name: badgeName,
+      role: badgeRole,
+      company: badgeCompany,
+    });
+
+    servePng(res, png);
+    return true;
+  }
+
+  // 4. Current Live Status (JSON) — also supports ?time=<ISO> for simulation and ?refresh=1 (Studio-authenticated)
   if (pathname === '/api/status') {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    if (isHead) {
+      res.end();
+      return true;
+    }
+
     let now = new Date();
     if (query.time && typeof query.time === 'string') {
       const parsed = new Date(query.time);
@@ -416,9 +487,6 @@ export async function handleApiRequest(
       syncedCalendars.map(c => ({ id: c.id, label: c.label }))
     );
 
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.end(
       JSON.stringify({
         now: now.toISOString(),
@@ -461,7 +529,7 @@ export async function handleApiRequest(
       res.end(JSON.stringify({ success: true, updated: new Date().toISOString() }));
       return true;
     } catch (err: any) {
-      res.statusCode = 400;
+      res.statusCode = err instanceof PayloadTooLargeError ? 413 : 400;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ error: err.message || 'Invalid JSON' }));
       return true;
@@ -501,7 +569,7 @@ export async function handleApiRequest(
       res.end(JSON.stringify({ success: true, count: events.length, events }));
       return true;
     } catch (err: any) {
-      res.statusCode = 500;
+      res.statusCode = err instanceof PayloadTooLargeError ? 413 : 500;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ error: err.message }));
       return true;
@@ -512,25 +580,27 @@ export async function handleApiRequest(
   return false;
 }
 
-function serveSvg(res: ServerResponse, svgContent: string) {
+function serveSvg(res: ServerResponse, svgContent: string, headOnly = false) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
   // Email clients aggressive cache prevention
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.end(svgContent);
+  res.end(headOnly ? undefined : svgContent);
 }
 
-function servePng(res: ServerResponse, pngBuffer: Buffer) {
+function servePng(res: ServerResponse, pngBuffer: Buffer, headOnly = false) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/png');
-  res.setHeader('Content-Length', pngBuffer.length);
+  if (!headOnly) {
+    res.setHeader('Content-Length', pngBuffer.length);
+  }
   // Email clients aggressive cache prevention
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.end(pngBuffer);
+  res.end(headOnly ? undefined : pngBuffer);
 }
 
 function sanitizeQueryField(val: unknown, fallback: string, maxLen = 120): string {
@@ -539,11 +609,11 @@ function sanitizeQueryField(val: unknown, fallback: string, maxLen = 120): strin
   return trimmed ? trimmed.slice(0, maxLen) : fallback;
 }
 
-function serveJson(res: ServerResponse, payload: unknown) {
+function serveJson(res: ServerResponse, payload: unknown, headOnly = false) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.end(JSON.stringify(payload, null, 2));
+  res.end(headOnly ? undefined : JSON.stringify(payload, null, 2));
 }
