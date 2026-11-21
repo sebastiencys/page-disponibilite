@@ -4,6 +4,8 @@
  * Protects all secret iCal URLs by keeping them strictly server-side.
  */
 
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { parseIcsEvents } from '../lib/icalParser.ts';
 import { DEFAULT_SCHEDULE, type CalendarEvent } from '../lib/availability.ts';
 
@@ -61,6 +63,14 @@ export class ExternalCalendarUrlError extends Error {
   }
 }
 
+export class IcsTooLargeError extends Error {
+  statusCode = 413;
+  constructor(maxBytes = MAX_ICS_BYTES) {
+    super(`Flux iCal trop volumineux (max ${Math.round(maxBytes / (1024 * 1024))} Mo).`);
+    this.name = 'IcsTooLargeError';
+  }
+}
+
 export async function readLimitedIcsText(
   res: globalThis.Response,
   maxBytes = MAX_ICS_BYTES
@@ -69,12 +79,12 @@ export async function readLimitedIcsText(
   if (contentLength) {
     const declaredBytes = Number(contentLength);
     if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
-      throw new Error(`Flux iCal trop volumineux (max ${Math.round(maxBytes / (1024 * 1024))} Mo).`);
+      throw new IcsTooLargeError(maxBytes);
     }
   }
   const icsText = await res.text();
   if (Buffer.byteLength(icsText, 'utf8') > maxBytes) {
-    throw new Error(`Flux iCal trop volumineux (max ${Math.round(maxBytes / (1024 * 1024))} Mo).`);
+    throw new IcsTooLargeError(maxBytes);
   }
   return icsText;
 }
@@ -167,6 +177,56 @@ export function getCalendarUrl(fallbackUrl?: string): string | null {
 }
 
 /**
+ * Checks whether an IPv4 or IPv6 literal belongs to loopback, private, link-local, or reserved space.
+ */
+export function isPrivateOrReservedIp(rawIp: string): boolean {
+  const stripped = rawIp.trim().replace(/^\[|\]$/g, '').split('%')[0].toLowerCase();
+  const ipVer = net.isIP(stripped);
+  if (ipVer === 0) return false;
+
+  if (ipVer === 4) {
+    const parts = stripped.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+    const [a, b] = parts;
+    if (a === 0) return true; // 0.0.0.0/8
+    if (a === 10) return true; // 10.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 CGNAT
+    if (a === 127) return true; // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true; // 169.254.0.0/16 link-local / metadata
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true; // 192.168.0.0/16
+    if (a >= 224) return true; // multicast / reserved
+    return false;
+  }
+
+  // IPv6 checks
+  if (stripped === '::' || stripped === '::1') return true;
+  // IPv4-mapped dotted form (::ffff:127.0.0.1)
+  if (stripped.startsWith('::ffff:')) {
+    const rest = stripped.slice('::ffff:'.length);
+    if (net.isIP(rest) === 4) {
+      return isPrivateOrReservedIp(rest);
+    }
+    const hexPair = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(rest);
+    if (hexPair) {
+      const hi = parseInt(hexPair[1], 16);
+      const lo = parseInt(hexPair[2], 16);
+      const ipv4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+      return isPrivateOrReservedIp(ipv4);
+    }
+  }
+  // ULA fc00::/7 (fc.. or fd..) and link-local fe80::/10 (fe80..febf)
+  const firstHextetMatch = /^([0-9a-f]{1,4}):/.exec(stripped);
+  if (firstHextetMatch) {
+    const firstWord = parseInt(firstHextetMatch[1], 16);
+    if ((firstWord & 0xfe00) === 0xfc00) return true; // fc00::/7
+    if ((firstWord & 0xffc0) === 0xfe80) return true; // fe80::/10
+    if ((firstWord & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+  }
+  return false;
+}
+
+/**
  * Validates and normalizes external iCal URLs (for manual Studio syncs), blocking private/loopback targets.
  */
 export function validateExternalCalendarUrl(rawUrl: string): string {
@@ -181,22 +241,106 @@ export function validateExternalCalendarUrl(rawUrl: string): string {
     throw new ExternalCalendarUrlError('Seules les URL http://, https:// ou webcal:// sont autorisées.');
   }
   const host = parsed.hostname.toLowerCase();
+  const bareHost = host.replace(/^\[|\]$/g, '');
   if (
     host === 'localhost' ||
-    host === '::1' ||
-    host === '[::1]' ||
-    host === '0.0.0.0' ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^169\.254\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+    host.endsWith('.localhost') ||
     host.endsWith('.local') ||
-    host.endsWith('.internal')
+    host.endsWith('.internal') ||
+    isPrivateOrReservedIp(bareHost)
   ) {
     throw new ExternalCalendarUrlError('Adresse locale ou privée non autorisée.');
   }
   return parsed.toString();
+}
+
+export type DnsLookupAllFn = (
+  hostname: string,
+  options: { all: true }
+) => Promise<Array<{ address: string; family: number }>>;
+
+/**
+ * Resolves external hostname DNS records and rejects any resolution targeting private, loopback, or link-local IPs.
+ */
+export async function assertPublicExternalHost(
+  urlStr: string,
+  lookupFn: DnsLookupAllFn = (h, opts) => dns.lookup(h, opts)
+): Promise<void> {
+  const parsed = new URL(urlStr);
+  const bareHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (net.isIP(bareHost) !== 0) {
+    if (isPrivateOrReservedIp(bareHost)) {
+      throw new ExternalCalendarUrlError('Adresse locale ou privée non autorisée.');
+    }
+    return;
+  }
+
+  let records: Array<{ address: string; family: number }>;
+  try {
+    records = await lookupFn(bareHost, { all: true });
+  } catch {
+    throw new ExternalCalendarUrlError("Nom d'hôte introuvable ou inaccessible.");
+  }
+
+  if (!Array.isArray(records) || records.length === 0) {
+    throw new ExternalCalendarUrlError("Nom d'hôte introuvable ou inaccessible.");
+  }
+
+  for (const rec of records) {
+    if (isPrivateOrReservedIp(rec.address)) {
+      throw new ExternalCalendarUrlError('Adresse résolue privée ou locale non autorisée.');
+    }
+  }
+}
+
+/**
+ * Fetches an external ICS feed safely: validates URL, checks DNS resolution against private networks,
+ * follows at most 3 validated redirects, enforces timeout, and limits payload size.
+ */
+export async function fetchSafeExternalIcs(
+  rawUrl: string,
+  options: {
+    timeoutMs?: number;
+    maxBytes?: number;
+    lookupFn?: DnsLookupAllFn;
+  } = {}
+): Promise<string> {
+  const timeoutMs = options.timeoutMs ?? 8000;
+  const maxBytes = options.maxBytes ?? MAX_ICS_BYTES;
+  let currentUrl = validateExternalCalendarUrl(rawUrl);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    for (let hop = 0; hop <= 3; hop++) {
+      await assertPublicExternalHost(currentUrl, options.lookupFn);
+      const response = await fetch(currentUrl, {
+        signal: controller.signal,
+        redirect: 'manual',
+        cache: 'no-store',
+        headers: { 'User-Agent': 'DispoLive-Calendar-Sync/1.0' },
+      });
+
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (!location || hop === 3) {
+          throw new ExternalCalendarUrlError('Trop de redirections ou redirection invalide.');
+        }
+        const resolvedRedirect = new URL(location, currentUrl).toString();
+        currentUrl = validateExternalCalendarUrl(resolvedRedirect);
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ICS: ${response.statusText || response.status}`);
+      }
+
+      return await readLimitedIcsText(response, maxBytes);
+    }
+    throw new ExternalCalendarUrlError('Trop de redirections.');
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function decorateSourceEvents(

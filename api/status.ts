@@ -38,9 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   const lang = normalizeAppLang(req.query?.lang, 'fr');
   const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
+  const studioAuthed = isRequestStudioAuthenticated(req.headers);
   const forceRefresh =
-    (req.query?.refresh === '1' || req.query?.refresh === 'true') &&
-    isRequestStudioAuthenticated(req.headers);
+    (req.query?.refresh === '1' || req.query?.refresh === 'true') && studioAuthed;
 
   let events: CalendarEvent[] = [];
   const synced = await getSyncedCalendarEvents(undefined, forceRefresh, now);
@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const avail = calculateAvailability(now, DEFAULT_SCHEDULE, events, undefined, timezone, lang);
-  const upcomingSlots = getAnonymizedUpcomingSlots(events, now, 8, DEFAULT_SCHEDULE, timezone);
+  const upcomingSlots = getAnonymizedUpcomingSlots(events, now, 8, DEFAULT_SCHEDULE, timezone, lang);
   const calendarSummaries = getCalendarSummaries(
     now,
     events,
@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     availability: avail,
     hasEnvCalendar: hasEnvCalendar(),
     calendars: calendarSummaries,
-    envCalendars: synced.calendars,
+    envCalendars: studioAuthed ? synced.calendars : [],
     upcomingSlots,
     profile: {
       name: DEFAULT_PROFILE.name,

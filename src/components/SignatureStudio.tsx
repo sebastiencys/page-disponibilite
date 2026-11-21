@@ -24,10 +24,22 @@ import {
   UserCheck,
   Clock,
   Globe,
+  QrCode,
 } from 'lucide-react';
-import { type AppLang, type AvailabilityResult, DEFAULT_PROFILE, DEFAULT_SCHEDULE } from '../lib/availability.ts';
-import type { BadgeStyle, BadgeTheme } from '../lib/badgeRenderer.ts';
-import { escapeHtml } from '../lib/badgeSvg.ts';
+import {
+  normalizeAppLang,
+  type AppLang,
+  type AvailabilityResult,
+  DEFAULT_PROFILE,
+  DEFAULT_SCHEDULE,
+} from '../lib/availability.ts';
+import {
+  escapeHtml,
+  normalizeBadgeStyle,
+  normalizeBadgeTheme,
+  type BadgeStyle,
+  type BadgeTheme,
+} from '../lib/badgeSvg.ts';
 import { copyTextToClipboard } from '../lib/clipboard.ts';
 import {
   AUTO_REFRESH_OPTIONS,
@@ -40,6 +52,47 @@ import {
   normalizeAutoRefreshMs,
   shouldTriggerAutoRefresh,
 } from '../lib/badgeRefresh.ts';
+import { QrCodeModal } from './QrCodeModal.tsx';
+
+const STUDIO_PREFS_STORAGE_KEY = 'dispolive_studio_prefs_v1';
+
+interface StudioPrefs {
+  badgeStyle: BadgeStyle;
+  badgeTheme: BadgeTheme;
+  badgeLang: AppLang;
+  format: 'png' | 'svg';
+  emailClientTab: 'gmail' | 'outlook' | 'apple';
+}
+
+function loadStudioPrefs(): StudioPrefs {
+  const defaults: StudioPrefs = {
+    badgeStyle: 'pill',
+    badgeTheme: 'light',
+    badgeLang: 'fr',
+    format: 'png',
+    emailClientTab: 'gmail',
+  };
+  if (typeof window === 'undefined') return defaults;
+  try {
+    const raw = localStorage.getItem(STUDIO_PREFS_STORAGE_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<Record<keyof StudioPrefs, unknown>>;
+    const client =
+      parsed.emailClientTab === 'outlook' || parsed.emailClientTab === 'apple' || parsed.emailClientTab === 'gmail'
+        ? parsed.emailClientTab
+        : 'gmail';
+    const fmt = parsed.format === 'svg' || parsed.format === 'png' ? parsed.format : 'png';
+    return {
+      badgeStyle: normalizeBadgeStyle(typeof parsed.badgeStyle === 'string' ? parsed.badgeStyle : undefined),
+      badgeTheme: normalizeBadgeTheme(typeof parsed.badgeTheme === 'string' ? parsed.badgeTheme : undefined),
+      badgeLang: normalizeAppLang(typeof parsed.badgeLang === 'string' ? parsed.badgeLang : undefined),
+      format: client === 'outlook' ? 'png' : fmt,
+      emailClientTab: client,
+    };
+  } catch {
+    return defaults;
+  }
+}
 
 interface SignatureStudioProps {
   availability: AvailabilityResult;
@@ -66,12 +119,14 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   onGoToSimulator,
   onRefreshLive,
 }) => {
-  const [badgeStyle, setBadgeStyle] = useState<BadgeStyle>('pill');
-  const [badgeTheme, setBadgeTheme] = useState<BadgeTheme>('light');
-  const [badgeLang, setBadgeLang] = useState<AppLang>('fr');
-  const [format, setFormat] = useState<'png' | 'svg'>('png');
+  const initialPrefs = useMemo(() => loadStudioPrefs(), []);
+  const [badgeStyle, setBadgeStyle] = useState<BadgeStyle>(initialPrefs.badgeStyle);
+  const [badgeTheme, setBadgeTheme] = useState<BadgeTheme>(initialPrefs.badgeTheme);
+  const [badgeLang, setBadgeLang] = useState<AppLang>(initialPrefs.badgeLang);
+  const [format, setFormat] = useState<'png' | 'svg'>(initialPrefs.format);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
-  const [emailClientTab, setEmailClientTab] = useState<'gmail' | 'outlook' | 'apple'>('gmail');
+  const [emailClientTab, setEmailClientTab] = useState<'gmail' | 'outlook' | 'apple'>(initialPrefs.emailClientTab);
+  const [showQrModal, setShowQrModal] = useState<boolean>(false);
   const [refreshKey, setRefreshKey] = useState<number>(() => Date.now());
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number>(() => Date.now());
   const [clockNow, setClockNow] = useState<number>(() => Date.now());
@@ -82,6 +137,20 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     }
     return normalizeAutoRefreshMs(undefined);
   });
+
+  // Persist Studio badge preferences
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(
+          STUDIO_PREFS_STORAGE_KEY,
+          JSON.stringify({ badgeStyle, badgeTheme, badgeLang, format, emailClientTab })
+        );
+      } catch {
+        // Ignore storage quota errors
+      }
+    }
+  }, [badgeStyle, badgeTheme, badgeLang, format, emailClientTab]);
 
   // Persist auto-refresh preference (default: 10 minutes)
   useEffect(() => {
@@ -188,7 +257,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     refreshKey
   );
   const badgeJsonUrl = `${appBaseUrl}/api/badge.json${badgeLang === 'en' ? '?lang=en' : ''}`;
-  const publicPageUrl = `${appBaseUrl}?view=public`;
+  const publicPageUrl = `${appBaseUrl}?view=public${badgeLang === 'en' ? '&lang=en' : ''}`;
 
   const todayCount = Math.max(0, Math.floor(availability.todayAppointmentsCount ?? 0));
   const hasTodayRdvs = todayCount > 0;
@@ -312,7 +381,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     <td style="padding-top: 4px; padding-bottom: 10px;">
       <!-- DISPOLIVE BADGE ${isCard ? 'CARTE COMPACTE' : 'PILL MODERNE'} -->
       <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
-        <img src="${safeBadgeSrc}" alt="Disponibilité en direct de ${safeName}" width="${imgWidth}" style="display: block; border: 0; outline: none; max-width: 100%; height: auto;" />
+        <img src="${safeBadgeSrc}" alt="${badgeLang === 'en' ? `Live availability for ${safeName}` : `Disponibilité en direct de ${safeName}`}" width="${imgWidth}" style="display: block; border: 0; outline: none; max-width: 100%; height: auto;" />
       </a>
     </td>
   </tr>
@@ -332,7 +401,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
   const generateMarkdownSnippet = () => {
     const cleanName = (profile.name || DEFAULT_PROFILE.name).replace(/[\[\]]/g, '');
-    return `[![Disponibilité de ${cleanName}](${badgeUrl})](${publicPageUrl})`;
+    const altPrefix = badgeLang === 'en' ? 'Availability of' : 'Disponibilité de';
+    return `[![${altPrefix} ${cleanName}](${badgeUrl})](${publicPageUrl})`;
   };
 
   const handleCopyCode = async (content: string, type: string) => {
@@ -888,12 +958,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                         <img
                           key={`dot-${format}-${badgeLang}-${refreshKey}`}
                           src={previewBadgeUrl}
-                          alt="Point de disponibilité"
+                          alt={badgeLang === 'en' ? 'Live availability' : 'Point de disponibilité'}
                           className="h-9 w-auto shrink-0"
                         />
                         <div className="text-xs leading-snug">
-                          <span className={`font-semibold block ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-100' : 'text-slate-800 dark:text-slate-100'}`}>Disponibilité en direct</span>
-                          <span className={`text-[11px] ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>Statut calculé en temps réel</span>
+                          <span className={`font-semibold block ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-100' : 'text-slate-800 dark:text-slate-100'}`}>
+                            {badgeLang === 'en' ? 'Live availability' : 'Disponibilité en direct'}
+                          </span>
+                          <span className={`text-[11px] ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {badgeLang === 'en' ? 'Calculated in real time' : 'Statut calculé en temps réel'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -907,13 +981,15 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
                       <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
-                        Widget encadré {cardDimLabel} : statut, horaire{hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :
+                        {badgeLang === 'en'
+                          ? `Framed widget ${cardDimLabel}: status, schedule${hasTodayRdvs ? ' and daily meetings' : ''}:`
+                          : `Widget encadré ${cardDimLabel} : statut, horaire${hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :`}
                       </div>
                       <div className="my-1 inline-block">
                         <img
                           key={`card-${format}-${badgeLang}-${refreshKey}`}
                           src={previewBadgeUrl}
-                          alt="Carte compacte de disponibilité"
+                          alt={badgeLang === 'en' ? 'Compact availability card' : 'Carte compacte de disponibilité'}
                           className="max-w-full rounded-xl shadow-xs transition-transform hover:scale-[1.01]"
                         />
                       </div>
@@ -928,13 +1004,15 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
                       <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
-                        Capsule {pillDimLabel} : statut, horaire{hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :
+                        {badgeLang === 'en'
+                          ? `Pill ${pillDimLabel}: status, schedule${hasTodayRdvs ? ' and daily meetings' : ''}:`
+                          : `Capsule ${pillDimLabel} : statut, horaire${hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :`}
                       </div>
                       <div className="my-1 inline-block">
                         <img
                           key={`pill-${format}-${badgeLang}-${refreshKey}`}
                           src={previewBadgeUrl}
-                          alt="Capsule pill de disponibilité"
+                          alt={badgeLang === 'en' ? 'Availability pill badge' : 'Capsule pill de disponibilité'}
                           className="max-w-full rounded-full shadow-xs transition-transform hover:scale-[1.01]"
                         />
                       </div>
@@ -1188,23 +1266,33 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     <span className="w-2 h-2 rounded-full bg-indigo-500 dark:bg-indigo-400" />
                     Option 5 : Lien de votre page publique
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyCode(publicPageUrl, 'publicUrl')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer shadow-xs transition-all shrink-0"
-                  >
-                    {copiedFormat === 'publicUrl' ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                        Lien public copié !
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        Copier le lien public
-                      </>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQrModal(true)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer shadow-xs transition-all shrink-0 whitespace-nowrap"
+                    >
+                      <QrCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      QR Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCode(publicPageUrl, 'publicUrl')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer shadow-xs transition-all shrink-0 whitespace-nowrap"
+                    >
+                      {copiedFormat === 'publicUrl' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          Lien public copié !
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copier le lien public
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200 dark:border-slate-800">
                   {publicPageUrl}
@@ -1471,6 +1559,14 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
           </div>
         </div>
       </div>
+
+      <QrCodeModal
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        url={publicPageUrl}
+        profileName={profile.name}
+        lang={badgeLang}
+      />
     </div>
   );
 };

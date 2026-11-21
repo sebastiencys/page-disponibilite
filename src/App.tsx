@@ -17,6 +17,8 @@ import {
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   formatTimeShort,
+  normalizeAppLang,
+  type AppLang,
   type AvailabilityResult,
   type UserProfile,
   type AnonymizedSlot,
@@ -44,6 +46,32 @@ export default function App() {
     }
     return 'public';
   });
+
+  const [publicLang, setPublicLang] = useState<AppLang>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return normalizeAppLang(params.get('lang') ?? undefined);
+    }
+    return 'fr';
+  });
+
+  // Sync active tab and public language into URL query string without reloading
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const viewSlug = currentTab === 'signature' ? 'studio' : currentTab;
+    params.set('view', viewSlug);
+    if (publicLang === 'en') {
+      params.set('lang', 'en');
+    } else {
+      params.delete('lang');
+    }
+    const nextSearch = params.toString();
+    const nextPath =
+      window.location.pathname === '/studio' && viewSlug !== 'studio' ? '/' : window.location.pathname;
+    const nextUrl = `${nextPath}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState(null, '', nextUrl);
+  }, [currentTab, publicLang]);
 
   // Studio authentication state (backed by STUDIO_PASSWORD in .env)
   const [authLoading, setAuthLoading] = useState<boolean>(true);
@@ -79,14 +107,22 @@ export default function App() {
   // Profile data (read-only from config/personal.json, refreshed via /api/status)
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
 
+  const isStudioRoute = currentTab !== 'public';
+  const studioLocked = authLoading || (passwordRequired && !isStudioAuthenticated);
+
   useEffect(() => {
     if (typeof document !== 'undefined') {
       const name = profile?.name?.trim();
+      const isEnTitle = (currentTab === 'public' || studioLocked) && publicLang === 'en';
       document.title = name
-        ? `${name} — Disponibilité en direct | DispoLive`
+        ? isEnTitle
+          ? `${name} — Live Availability | DispoLive`
+          : `${name} — Disponibilité en direct | DispoLive`
+        : isEnTitle
+        ? 'DispoLive - Live Status & Email Signature Badge'
         : 'DispoLive - Statut & Badge Signature en Temps Réel';
     }
-  }, [profile?.name]);
+  }, [profile?.name, currentTab, publicLang, studioLocked]);
 
   const [icsUrl, setIcsUrl] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -105,7 +141,14 @@ export default function App() {
 
   // Current computed availability (initialized with client calculation, refreshed via server status)
   const [availability, setAvailability] = useState<AvailabilityResult>(() => {
-    return calculateAvailability(new Date(), DEFAULT_SCHEDULE, [], { type: 'auto' }, DEFAULT_SCHEDULE.timezone || 'Europe/Paris');
+    return calculateAvailability(
+      new Date(),
+      DEFAULT_SCHEDULE,
+      [],
+      { type: 'auto' },
+      DEFAULT_SCHEDULE.timezone || 'Europe/Paris',
+      publicLang
+    );
   });
 
   // Base URL
@@ -138,6 +181,51 @@ export default function App() {
     checkStudioAuth();
   }, [checkStudioAuth]);
 
+  // Fetch live status from server (which evaluates schedule.json + private CALENDAR_ICS_URL + process.env.TIMEZONE)
+  const fetchServerStatus = useCallback(
+    async (forceRefresh = false, langOverride?: AppLang, tokenOverride?: string) => {
+      const activeLang = langOverride ?? publicLang;
+      const effectiveToken = tokenOverride ?? studioToken;
+      try {
+        const query = `lang=${activeLang}${forceRefresh ? '&refresh=1' : ''}`;
+        const endpoint = `/api/status?${query}`;
+        const res = await fetch(endpoint, {
+          headers: effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.availability) {
+            setAvailability(data.availability);
+          }
+          if (data.profile) {
+            setProfile(data.profile);
+          }
+          if (data.upcomingSlots) {
+            setUpcomingSlots(data.upcomingSlots);
+          }
+          if (data.hasEnvCalendar !== undefined) {
+            setHasEnvCalendar(data.hasEnvCalendar);
+          }
+          if (Array.isArray(data.envCalendars)) {
+            setEnvCalendars(data.envCalendars);
+          }
+          if (Array.isArray(data.calendars)) {
+            setCalendarsSummary(data.calendars);
+          }
+          if (data.timezone) {
+            setTimezone(data.timezone);
+          }
+        }
+      } catch {
+        // Fallback to local computation with timezone
+        setAvailability(
+          calculateAvailability(new Date(), DEFAULT_SCHEDULE, [], { type: 'auto' }, timezone, activeLang)
+        );
+      }
+    },
+    [publicLang, studioToken, timezone]
+  );
+
   const handleStudioUnlockSuccess = (newToken: string) => {
     if (newToken) {
       sessionStorage.setItem(STUDIO_TOKEN_KEY, newToken);
@@ -145,6 +233,7 @@ export default function App() {
     }
     setIsStudioAuthenticated(true);
     setAuthLoading(false);
+    void fetchServerStatus(false, publicLang, newToken);
   };
 
   const handleLockStudio = async () => {
@@ -155,46 +244,10 @@ export default function App() {
     }
     sessionStorage.removeItem(STUDIO_TOKEN_KEY);
     setStudioToken('');
+    setEnvCalendars([]);
     setIsStudioAuthenticated(false);
     setCurrentTab('public');
   };
-
-  // Fetch live status from server (which evaluates schedule.json + private CALENDAR_ICS_URL + process.env.TIMEZONE)
-  const fetchServerStatus = useCallback(async (forceRefresh = false) => {
-    try {
-      const endpoint = forceRefresh ? '/api/status?refresh=1' : '/api/status';
-      const res = await fetch(endpoint, {
-        headers: forceRefresh && studioToken ? { Authorization: `Bearer ${studioToken}` } : {},
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.availability) {
-          setAvailability(data.availability);
-        }
-        if (data.profile) {
-          setProfile(data.profile);
-        }
-        if (data.upcomingSlots) {
-          setUpcomingSlots(data.upcomingSlots);
-        }
-        if (data.hasEnvCalendar !== undefined) {
-          setHasEnvCalendar(data.hasEnvCalendar);
-        }
-        if (Array.isArray(data.envCalendars)) {
-          setEnvCalendars(data.envCalendars);
-        }
-        if (Array.isArray(data.calendars)) {
-          setCalendarsSummary(data.calendars);
-        }
-        if (data.timezone) {
-          setTimezone(data.timezone);
-        }
-      }
-    } catch {
-      // Fallback to local computation with timezone
-      setAvailability(calculateAvailability(new Date(), DEFAULT_SCHEDULE, [], { type: 'auto' }, timezone));
-    }
-  }, [studioToken, timezone]);
 
   // Initial check, interval polling every 10 seconds, and immediate refresh when tab wakes up
   useEffect(() => {
@@ -288,9 +341,8 @@ export default function App() {
     [fetchServerStatus, passwordRequired, studioToken]
   );
 
-  const isStudioRoute = currentTab !== 'public';
-  const studioLocked = authLoading || (passwordRequired && !isStudioAuthenticated);
   const failedCalendarsCount = envCalendars.filter(c => !c.ok).length;
+  const headerLang: AppLang = currentTab === 'public' || studioLocked ? publicLang : 'fr';
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors">
@@ -299,7 +351,7 @@ export default function App() {
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
         availability={availability}
-        currentTimeStr={formatTimeShort(now, timezone)}
+        currentTimeStr={formatTimeShort(now, timezone, headerLang)}
         timezone={timezone}
         profileName={profile.name}
         studioLocked={studioLocked}
@@ -308,6 +360,7 @@ export default function App() {
         isDark={isDark}
         onToggleTheme={() => setIsDark(d => !d)}
         calendarErrorCount={failedCalendarsCount}
+        lang={publicLang}
       />
 
       {/* Main Content Area */}
@@ -320,6 +373,9 @@ export default function App() {
             timezone={timezone}
             upcomingSlots={upcomingSlots}
             calendars={calendarsSummary}
+            lang={publicLang}
+            onChangeLang={setPublicLang}
+            now={now}
             onGoToStudio={() => setCurrentTab('signature')}
           />
         )}

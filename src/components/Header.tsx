@@ -1,6 +1,6 @@
 import React from 'react';
 import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock, Sliders, Lock, Sun, Moon, AlertTriangle } from 'lucide-react';
-import { type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
+import { type AppLang, type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
 
 interface HeaderProps {
   currentTab: string;
@@ -15,6 +15,7 @@ interface HeaderProps {
   isDark?: boolean;
   onToggleTheme?: () => void;
   calendarErrorCount?: number;
+  lang?: AppLang;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,8 +31,10 @@ export const Header: React.FC<HeaderProps> = ({
   isDark = false,
   onToggleTheme,
   calendarErrorCount = 0,
+  lang = 'fr',
 }) => {
   const isPublicOrLocked = currentTab === 'public' || studioLocked;
+  const isPublicEn = isPublicOrLocked && lang === 'en';
   const tzCity = timezone.split('/')[1]?.replace('_', ' ') || timezone;
 
   const tabs = [
@@ -43,13 +46,20 @@ export const Header: React.FC<HeaderProps> = ({
 
   const renderThemeToggle = () => {
     if (!onToggleTheme) return null;
+    const label = isPublicEn
+      ? isDark
+        ? 'Switch to light theme'
+        : 'Switch to dark theme'
+      : isDark
+      ? 'Passer au thème clair'
+      : 'Passer au thème sombre';
     return (
       <button
         type="button"
         onClick={onToggleTheme}
         className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer shrink-0"
-        aria-label={isDark ? 'Passer au thème clair' : 'Passer au thème sombre'}
-        title={isDark ? 'Passer au thème clair' : 'Passer au thème sombre'}
+        aria-label={label}
+        title={label}
       >
         {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
       </button>
@@ -116,10 +126,10 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   onClick={() => onSelectTab('signature')}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 border border-slate-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-800 rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0"
-                  title="Accéder au générateur de signature et aux réglages"
+                  title={isPublicEn ? 'Open signature studio and settings' : 'Accéder au générateur de signature et aux réglages'}
                 >
                   <Sparkles className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                  <span className="hidden md:inline">Paramètres</span>
+                  <span className="hidden md:inline">{isPublicEn ? 'Settings' : 'Paramètres'}</span>
                 </button>
               )}
             </div>

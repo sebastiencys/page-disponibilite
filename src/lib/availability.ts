@@ -960,7 +960,8 @@ export function getAnonymizedUpcomingSlots(
   fromDate: Date = new Date(),
   maxSlots = 8,
   schedule: ScheduleConfig = DEFAULT_SCHEDULE,
-  timeZone: string = schedule.timezone || 'Europe/Paris'
+  timeZone: string = schedule.timezone || 'Europe/Paris',
+  lang: AppLang = 'fr'
 ): AnonymizedSlot[] {
   const fromMs = fromDate.getTime();
   const normalizedEvents = normalizeEventsForSchedule(events, schedule, timeZone);
@@ -998,10 +999,12 @@ export function getAnonymizedUpcomingSlots(
     }
   }
 
+  const slotLabel = lang === 'en' ? 'Reserved slot' : 'Créneau réservé';
+
   return merged.slice(0, maxSlots).map(slot => ({
     start: new Date(slot.startMs).toISOString(),
     end: new Date(slot.endMs).toISOString(),
-    label: 'Créneau réservé',
+    label: slotLabel,
     ...(slot.calendarLabels.length > 0
       ? {
           calendarLabel: slot.calendarLabels.join(' • '),
@@ -1081,7 +1084,8 @@ export function getUpcomingClosures(
   now: Date,
   schedule: ScheduleConfig = DEFAULT_SCHEDULE,
   timeZone: string = schedule.timezone || 'Europe/Paris',
-  withinDays: number = 30
+  withinDays: number = 30,
+  lang: AppLang = 'fr'
 ): UpcomingClosureItem[] {
   if (!Array.isArray(schedule.closures) || schedule.closures.length === 0) {
     return [];
@@ -1095,7 +1099,15 @@ export function getUpcomingClosures(
     const dayStr = addDaysToDateStr(todayStr, offset);
     const match = getClosureForDate(dayStr, schedule);
     if (match) {
-      const label = match.label?.trim() || (match.type === 'vacation' ? 'Congés' : 'Jour férié');
+      const defaultLabel =
+        match.type === 'vacation'
+          ? lang === 'en'
+            ? 'On leave'
+            : 'Congés'
+          : lang === 'en'
+          ? 'Public holiday'
+          : 'Jour férié';
+      const label = match.label?.trim() || defaultLabel;
       const type: 'holiday' | 'vacation' = match.type === 'vacation' ? 'vacation' : 'holiday';
       if (
         activeRun &&

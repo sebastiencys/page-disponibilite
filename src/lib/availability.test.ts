@@ -744,6 +744,42 @@ test('closures / holidays trigger HOLIDAY status, skip entire closure in getNext
   assert.equal(busyHoliday.subtitle, 'Libre à 10h30');
 });
 
+test('getAnonymizedUpcomingSlots and getUpcomingClosures respect lang="en" default labels', () => {
+  const tz = 'Europe/Paris';
+  const monday = parisDate('2026-11-09T09:00:00');
+  const slotsEn = getAnonymizedUpcomingSlots(
+    [
+      {
+        id: 'evt-en',
+        title: 'Secret',
+        start: parisDate('2026-11-09T10:00:00').toISOString(),
+        end: parisDate('2026-11-09T11:00:00').toISOString(),
+        isBusy: true,
+      },
+    ],
+    monday,
+    8,
+    TEST_SCHEDULE,
+    tz,
+    'en'
+  );
+  assert.equal(slotsEn.length, 1);
+  assert.equal(slotsEn[0].label, 'Reserved slot');
+
+  const unlabeledClosures: ScheduleConfig = {
+    ...TEST_SCHEDULE,
+    closures: [
+      { startDate: '2026-11-11', type: 'holiday' },
+      { startDate: '2026-11-12', type: 'vacation' },
+    ],
+  };
+  const closuresEn = getUpcomingClosures(monday, unlabeledClosures, tz, 10, 'en');
+  assert.deepEqual(
+    closuresEn.map(c => c.label),
+    ['Public holiday', 'On leave']
+  );
+});
+
 test('getUpcomingClosures merges contiguous days, resolves annual closures across year boundary, and respects withinDays', () => {
   const tz = 'Europe/Paris';
   const scheduleWithClosures: ScheduleConfig = {

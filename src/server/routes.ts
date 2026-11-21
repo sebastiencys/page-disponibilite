@@ -32,9 +32,9 @@ import { parseIcsEvents } from '../lib/icalParser.ts';
 import {
   hasEnvCalendar,
   getSyncedCalendarEvents,
-  validateExternalCalendarUrl,
   ExternalCalendarUrlError,
-  readLimitedIcsText,
+  IcsTooLargeError,
+  fetchSafeExternalIcs,
   type SyncedCalendarInfo,
 } from './calendarSync.ts';
 import { computeSemanticWeakEtag, matchesIfNoneMatch } from './etag.ts';
@@ -474,9 +474,9 @@ export async function handleApiRequest(
       const parsed = new Date(query.time);
       if (!isNaN(parsed.getTime())) now = parsed;
     }
+    const studioAuthed = isRequestStudioAuthenticated(req.headers);
     const forceRefresh =
-      (query.refresh === '1' || query.refresh === 'true') &&
-      isRequestStudioAuthenticated(req.headers);
+      (query.refresh === '1' || query.refresh === 'true') && studioAuthed;
 
     const { events: currentEvents, calendars: syncedCalendars } =
       await resolveCurrentCalendarState(now, forceRefresh);
@@ -493,7 +493,8 @@ export async function handleApiRequest(
       now,
       8,
       globalStore.schedule,
-      serverTimezone
+      serverTimezone,
+      badgeLang
     );
     const calendarSummaries = getCalendarSummaries(
       now,
@@ -510,7 +511,7 @@ export async function handleApiRequest(
       availability: avail,
       hasEnvCalendar: hasEnvCalendar(),
       calendars: calendarSummaries,
-      envCalendars: syncedCalendars,
+      envCalendars: studioAuthed ? syncedCalendars : [],
       upcomingSlots,
       profile: {
         name: globalStore.name,
@@ -593,23 +594,7 @@ export async function handleApiRequest(
         return true;
       }
 
-      const fetchUrl = validateExternalCalendarUrl(url);
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      let response: globalThis.Response;
-      try {
-        response = await fetch(fetchUrl, {
-          signal: controller.signal,
-          cache: 'no-store',
-          headers: { 'User-Agent': 'DispoLive-Calendar-Sync/1.0' },
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
-      if (!response.ok) {
-        throw new Error(`Failed to fetch ICS: ${response.statusText}`);
-      }
-      const icsText = await readLimitedIcsText(response);
+      const icsText = await fetchSafeExternalIcs(url);
       const events = parseIcsEvents(icsText, serverTimezone);
 
       globalStore.events = events;
@@ -621,7 +606,7 @@ export async function handleApiRequest(
       return true;
     } catch (err: any) {
       res.statusCode =
-        err instanceof PayloadTooLargeError
+        err instanceof PayloadTooLargeError || err instanceof IcsTooLargeError
           ? 413
           : err instanceof ExternalCalendarUrlError
           ? 400

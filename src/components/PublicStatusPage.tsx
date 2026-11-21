@@ -15,12 +15,14 @@ import {
   FileCode,
   Link2,
   UserPlus,
+  QrCode,
 } from 'lucide-react';
 import {
   getZonedDateParts,
   getEffectiveLunchBreak,
   getUpcomingClosures,
   formatTimeShort,
+  type AppLang,
   type AvailabilityResult,
   type ScheduleConfig,
   type DayOfWeek,
@@ -30,6 +32,7 @@ import {
 import { formatTodayAppointmentsLabel } from '../lib/badgeSvg.ts';
 import { copyTextToClipboard } from '../lib/clipboard.ts';
 import { buildPublicVCard } from '../lib/vcard.ts';
+import { QrCodeModal } from './QrCodeModal.tsx';
 
 interface PublicStatusPageProps {
   profile: {
@@ -44,17 +47,31 @@ interface PublicStatusPageProps {
   timezone?: string;
   upcomingSlots?: AnonymizedSlot[];
   calendars?: CalendarSummaryItem[];
+  lang?: AppLang;
+  onChangeLang?: (lang: AppLang) => void;
+  now?: Date;
   onGoToStudio?: () => void;
 }
 
-const DAY_LABELS: Record<DayOfWeek, string> = {
-  1: 'Lundi',
-  2: 'Mardi',
-  3: 'Mercredi',
-  4: 'Jeudi',
-  5: 'Vendredi',
-  6: 'Samedi',
-  0: 'Dimanche',
+const DAY_LABELS_BY_LANG: Record<AppLang, Record<DayOfWeek, string>> = {
+  fr: {
+    1: 'Lundi',
+    2: 'Mardi',
+    3: 'Mercredi',
+    4: 'Jeudi',
+    5: 'Vendredi',
+    6: 'Samedi',
+    0: 'Dimanche',
+  },
+  en: {
+    1: 'Monday',
+    2: 'Tuesday',
+    3: 'Wednesday',
+    4: 'Thursday',
+    5: 'Friday',
+    6: 'Saturday',
+    0: 'Sunday',
+  },
 };
 
 export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
@@ -64,20 +81,37 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   timezone = schedule.timezone || 'Europe/Paris',
   upcomingSlots = [],
   calendars = [],
+  lang = 'fr',
+  onChangeLang,
+  now = new Date(),
   onGoToStudio,
 }) => {
   const [copiedStatus, setCopiedStatus] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+
+  const isEn = lang === 'en';
+  const dayLabels = DAY_LABELS_BY_LANG[lang];
 
   const todayRdvLabel = formatTodayAppointmentsLabel(
     availability.todayAppointmentsCount ?? 0,
-    availability.todayAllDayAppointmentsCount ?? 0
+    availability.todayAllDayAppointmentsCount ?? 0,
+    lang
   );
 
+  const nowParts = getZonedDateParts(now, timezone);
+  const nowDateKey = `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}-${String(nowParts.day).padStart(2, '0')}`;
+
   const upcomingClosures = useMemo(
-    () => getUpcomingClosures(new Date(), schedule, timezone, 30),
-    [schedule, timezone]
+    () => getUpcomingClosures(now, schedule, timezone, 30, lang),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nowDateKey, schedule, timezone, lang]
   );
+
+  const getPublicShareUrl = () => {
+    if (typeof window === 'undefined') return '';
+    return `${window.location.origin}/?view=public${isEn ? '&lang=en' : ''}`;
+  };
 
   const handleCopyStatus = async () => {
     const parts = [`${profile.name} — ${availability.title} (${availability.subtitle})`];
@@ -90,8 +124,8 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   };
 
   const handleCopyLink = async () => {
-    if (typeof window === 'undefined') return;
-    const publicUrl = `${window.location.origin}/?view=public`;
+    const publicUrl = getPublicShareUrl();
+    if (!publicUrl) return;
     await copyTextToClipboard(publicUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -99,7 +133,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
 
   const handleDownloadVCard = () => {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
-    const publicUrl = `${window.location.origin}/?view=public`;
+    const publicUrl = getPublicShareUrl();
     const vcardContent = buildPublicVCard(profile, publicUrl);
     const blob = new Blob([vcardContent], { type: 'text/vcard;charset=utf-8' });
     const objectUrl = URL.createObjectURL(blob);
@@ -117,6 +151,9 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   };
+
+  const formatScheduleTime = (hhmm: string) =>
+    isEn ? hhmm : hhmm.replace(':', 'h');
 
   const getStatusIcon = () => {
     if (availability.status === 'HOLIDAY') {
@@ -138,7 +175,10 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   const groupedSlots = useMemo(() => {
     if (!upcomingSlots || upcomingSlots.length === 0) return [];
 
-    const nowZoned = getZonedDateParts(new Date(), timezone);
+    const nowZoned = getZonedDateParts(now, timezone);
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowParts = getZonedDateParts(tomorrow, timezone);
+
     const groups: {
       dateKey: string;
       dayLabel: string;
@@ -153,31 +193,36 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
 
       const dayStr = String(startParts.day).padStart(2, '0');
       const monthStr = String(startParts.month).padStart(2, '0');
-      let dayLabel = `${DAY_LABELS[startParts.dayOfWeek]} ${dayStr}/${monthStr}`;
+      let dayLabel = `${dayLabels[startParts.dayOfWeek]} ${dayStr}/${monthStr}`;
       if (
         startParts.year === nowZoned.year &&
         startParts.month === nowZoned.month &&
         startParts.day === nowZoned.day
       ) {
-        dayLabel = "Aujourd'hui";
-      } else {
-        const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        const tomorrowParts = getZonedDateParts(tomorrow, timezone);
-        if (
-          startParts.year === tomorrowParts.year &&
-          startParts.month === tomorrowParts.month &&
-          startParts.day === tomorrowParts.day
-        ) {
-          dayLabel = `Demain (${DAY_LABELS[startParts.dayOfWeek]})`;
-        }
+        dayLabel = isEn ? 'Today' : "Aujourd'hui";
+      } else if (
+        startParts.year === tomorrowParts.year &&
+        startParts.month === tomorrowParts.month &&
+        startParts.day === tomorrowParts.day
+      ) {
+        dayLabel = isEn
+          ? `Tomorrow (${dayLabels[startParts.dayOfWeek]})`
+          : `Demain (${dayLabels[startParts.dayOfWeek]})`;
       }
 
-      const startStr = formatTimeShort(start, timezone);
-      const endStr = formatTimeShort(end, timezone);
+      const startStr = formatTimeShort(start, timezone, lang);
+      const endStr = formatTimeShort(end, timezone, lang);
       const diffMins = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000));
       const hours = Math.floor(diffMins / 60);
       const mins = diffMins % 60;
-      const durationStr = hours > 0 ? (mins > 0 ? `${hours}h${String(mins).padStart(2, '0')}` : `${hours}h`) : `${mins} min`;
+      const durationStr =
+        hours > 0
+          ? mins > 0
+            ? isEn
+              ? `${hours}h ${mins}m`
+              : `${hours}h${String(mins).padStart(2, '0')}`
+            : `${hours}h`
+          : `${mins} min`;
 
       let group = groups.find(g => g.dateKey === dateKey);
       if (!group) {
@@ -193,7 +238,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
     }
 
     return groups;
-  }, [upcomingSlots, timezone]);
+  }, [upcomingSlots, now, timezone, lang, dayLabels, isEn]);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 pb-16">
@@ -204,6 +249,33 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           className="absolute inset-0 opacity-10 dark:opacity-15 pointer-events-none blur-3xl"
           style={{ backgroundColor: availability.badgeColor }}
         />
+
+        {/* Language Segmented Control (FR / EN) */}
+        {onChangeLang && (
+          <div className="flex justify-end mb-2 sm:mb-0 sm:absolute sm:top-6 sm:right-6 relative z-10">
+            <div
+              role="group"
+              aria-label={isEn ? 'Page language' : 'Langue de la page'}
+              className="inline-flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/90 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700"
+            >
+              {(['fr', 'en'] as AppLang[]).map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => onChangeLang(opt)}
+                  aria-pressed={lang === opt}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase transition-all cursor-pointer whitespace-nowrap ${
+                    lang === opt
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {opt.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Big Animated Status Indicator */}
         <div className="inline-flex items-center justify-center mb-6">
@@ -281,9 +353,15 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                     <span className="text-slate-400 dark:text-slate-500">•</span>
                     <span className="font-semibold">
                       {cal.isBusyNow
-                        ? 'Occupé'
+                        ? isEn
+                          ? 'Busy'
+                          : 'Occupé'
                         : cal.todayAppointmentsCount > 0
-                        ? `${cal.todayAppointmentsCount} RDV`
+                        ? isEn
+                          ? `${cal.todayAppointmentsCount} appt${cal.todayAppointmentsCount > 1 ? 's' : ''}`
+                          : `${cal.todayAppointmentsCount} RDV`
+                        : isEn
+                        ? 'Free'
                         : 'Libre'}
                     </span>
                   </span>
@@ -300,38 +378,38 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               href={profile.bookingUrl}
               target="_blank"
               rel="noreferrer"
-              className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all"
+              className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all whitespace-nowrap"
             >
               <Calendar className="w-4 h-4" />
-              Réserver un créneau dans l'agenda
+              {isEn ? 'Book a slot' : "Réserver un créneau dans l'agenda"}
             </a>
           )}
 
           {profile.email && (
             <a
               href={`mailto:${profile.email}`}
-              className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+              className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap"
             >
               <Mail className="w-4 h-4" />
-              Envoyer un e-mail
+              {isEn ? 'Send email' : 'Envoyer un e-mail'}
             </a>
           )}
 
           <button
             type="button"
             onClick={handleCopyStatus}
-            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-            title="Copier le statut actuel en texte"
+            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+            title={isEn ? 'Copy current availability status as text' : 'Copier le statut actuel en texte'}
           >
             {copiedStatus ? (
               <>
                 <Check className="w-4 h-4 text-emerald-500" />
-                <span>Statut copié !</span>
+                <span>{isEn ? 'Status copied!' : 'Statut copié !'}</span>
               </>
             ) : (
               <>
                 <Copy className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                <span>Copier mon statut</span>
+                <span>{isEn ? 'Copy status' : 'Copier mon statut'}</span>
               </>
             )}
           </button>
@@ -339,18 +417,18 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           <button
             type="button"
             onClick={handleCopyLink}
-            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-            title="Copier le lien de cette page publique"
+            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+            title={isEn ? 'Copy public page URL' : 'Copier le lien de cette page publique'}
           >
             {copiedLink ? (
               <>
                 <Check className="w-4 h-4 text-emerald-500" />
-                <span>Lien copié !</span>
+                <span>{isEn ? 'Link copied!' : 'Lien copié !'}</span>
               </>
             ) : (
               <>
                 <Link2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                <span>Copier le lien</span>
+                <span>{isEn ? 'Copy link' : 'Copier le lien'}</span>
               </>
             )}
           </button>
@@ -358,11 +436,25 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           <button
             type="button"
             onClick={handleDownloadVCard}
-            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-            title="Télécharger la fiche contact (.vcf) pour votre carnet d'adresses"
+            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+            title={
+              isEn
+                ? 'Download contact card (.vcf) for your address book'
+                : "Télécharger la fiche contact (.vcf) pour votre carnet d'adresses"
+            }
           >
             <UserPlus className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
-            <span>Ajouter aux contacts</span>
+            <span>{isEn ? 'Add to contacts' : 'Ajouter aux contacts'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowQrModal(true)}
+            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+            title={isEn ? 'Open QR code to share this status page on mobile' : 'Afficher le QR Code pour partager cette page sur mobile'}
+          >
+            <QrCode className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <span>QR Code</span>
           </button>
         </div>
       </div>
@@ -373,7 +465,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           <div className="flex items-center gap-2">
             <CalendarCheck className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              Prochains créneaux occupés
+              {isEn ? 'Upcoming busy slots' : 'Prochains créneaux occupés'}
             </h2>
           </div>
         </div>
@@ -395,11 +487,11 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                       <div className="flex items-center gap-2.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-2xs" />
                         <div>
-                          <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-100">
+                          <span className="text-xs font-bold font-mono tabular-nums text-slate-800 dark:text-slate-100">
                             {slot.startStr} - {slot.endStr}
                           </span>
                           <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
-                            <span>Créneau réservé</span>
+                            <span>{isEn ? 'Reserved slot' : 'Créneau réservé'}</span>
                             {slot.calendarLabel && (
                               <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70 font-semibold text-[10px]">
                                 {slot.calendarLabel}
@@ -408,7 +500,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                           </span>
                         </div>
                       </div>
-                      <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                      <span className="text-[11px] font-semibold tabular-nums text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                         {slot.durationStr}
                       </span>
                     </div>
@@ -419,8 +511,14 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           </div>
         ) : (
           <div className="py-6 px-4 text-center rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 space-y-1">
-            <p className="font-semibold text-slate-700 dark:text-slate-200">Aucun créneau occupé prévu prochainement</p>
-            <p className="text-slate-400 dark:text-slate-500">Les créneaux de travail habituels sont entièrement disponibles.</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">
+              {isEn ? 'No busy slots scheduled soon' : 'Aucun créneau occupé prévu prochainement'}
+            </p>
+            <p className="text-slate-400 dark:text-slate-500">
+              {isEn
+                ? 'Normal working hours remain fully available.'
+                : 'Les créneaux de travail habituels sont entièrement disponibles.'}
+            </p>
           </div>
         )}
       </div>
@@ -430,17 +528,16 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            Horaires habituels de travail
+            {isEn ? 'Regular working hours' : 'Horaires habituels de travail'}
           </h2>
           <span className="text-xs font-medium text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md w-fit">
-            Fuseau : {timezone}
+            {isEn ? 'Timezone:' : 'Fuseau :'} {timezone}
           </span>
         </div>
         <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs sm:text-sm">
           {([1, 2, 3, 4, 5, 6, 0] as DayOfWeek[]).map(day => {
             const conf = schedule.days[day];
-            const zonedNow = getZonedDateParts(new Date(), timezone);
-            const isToday = zonedNow.dayOfWeek === day;
+            const isToday = nowParts.dayOfWeek === day;
 
             return (
               <div
@@ -452,20 +549,22 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span>{DAY_LABELS[day]}</span>
+                  <span>{dayLabels[day]}</span>
                   {isToday && (
                     <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-600 text-white rounded-full">
-                      Aujourd'hui
+                      {isEn ? 'Today' : "Aujourd'hui"}
                     </span>
                   )}
                 </div>
                 <div>
                   {conf.enabled ? (
-                    <span className={`font-mono ${isToday ? 'text-indigo-950 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-300'}`}>
-                      {conf.start.replace(':', 'h')} - {conf.end.replace(':', 'h')}
+                    <span className={`font-mono tabular-nums ${isToday ? 'text-indigo-950 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-300'}`}>
+                      {formatScheduleTime(conf.start)} - {formatScheduleTime(conf.end)}
                     </span>
                   ) : (
-                    <span className="text-slate-400 dark:text-slate-500 italic">Fermé / Repos</span>
+                    <span className="text-slate-400 dark:text-slate-500 italic">
+                      {isEn ? 'Closed / Off' : 'Fermé / Repos'}
+                    </span>
                   )}
                 </div>
               </div>
@@ -482,15 +581,20 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
 
           if (!schedule.lunchBreak.enabled && customDays.length === 0) return null;
 
+          const globalLunchLabel =
+            isEn && schedule.lunchBreak.label === 'Pause déjeuner'
+              ? 'Lunch break'
+              : schedule.lunchBreak.label;
+
           return (
             <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 space-y-1 border-t border-slate-100 dark:border-slate-800">
               {schedule.lunchBreak.enabled && (
                 <div className="flex items-center gap-1.5">
                   <Coffee className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   <span>
-                    {schedule.lunchBreak.label} :{' '}
-                    <strong className="font-medium text-slate-700 dark:text-slate-200">
-                      {schedule.lunchBreak.start.replace(':', 'h')} - {schedule.lunchBreak.end.replace(':', 'h')}
+                    {globalLunchLabel} :{' '}
+                    <strong className="font-medium text-slate-700 dark:text-slate-200 font-mono tabular-nums">
+                      {formatScheduleTime(schedule.lunchBreak.start)} - {formatScheduleTime(schedule.lunchBreak.end)}
                     </strong>
                   </span>
                 </div>
@@ -499,9 +603,13 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                 <div className="pl-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
                   {customDays.map(({ day, eff }) => (
                     <span key={day}>
-                      {DAY_LABELS[day]} :{' '}
-                      <strong className="font-medium text-slate-700 dark:text-slate-200">
-                        {eff.enabled ? `${eff.start.replace(':', 'h')} - ${eff.end.replace(':', 'h')}` : 'Aucune'}
+                      {dayLabels[day]} :{' '}
+                      <strong className="font-medium text-slate-700 dark:text-slate-200 font-mono tabular-nums">
+                        {eff.enabled
+                          ? `${formatScheduleTime(eff.start)} - ${formatScheduleTime(eff.end)}`
+                          : isEn
+                          ? 'None'
+                          : 'Aucune'}
                       </strong>
                     </span>
                   ))}
@@ -515,13 +623,13 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 space-y-1.5 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center gap-1.5 font-medium text-violet-700 dark:text-violet-300">
               <CalendarOff className="w-3.5 h-3.5 text-violet-500 dark:text-violet-400 shrink-0" />
-              <span>Prochaines fermetures / congés (30 j) :</span>
+              <span>{isEn ? 'Upcoming closures / leave (30d):' : 'Prochaines fermetures / congés (30 j) :'}</span>
             </div>
             <div className="pl-5 flex flex-wrap gap-2">
               {upcomingClosures.map((closure, idx) => {
                 const fmt = (dStr: string) => {
                   const [, m, d] = dStr.split('-');
-                  return `${d}/${m}`;
+                  return isEn ? `${m}/${d}` : `${d}/${m}`;
                 };
                 const range =
                   closure.endDate !== closure.startDate
@@ -532,7 +640,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                     key={`${closure.startDate}-${idx}`}
                     className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/50 border border-violet-200/80 dark:border-violet-800/60 text-[11px] text-violet-900 dark:text-violet-200"
                   >
-                    <strong className="font-mono">{range}</strong>
+                    <strong className="font-mono tabular-nums">{range}</strong>
                     <span>{closure.label}</span>
                   </span>
                 );
@@ -545,14 +653,14 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
       {/* Discreet owner access & JSON API footer */}
       <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
         <a
-          href="/api/badge.json"
+          href={`/api/badge.json${isEn ? '?lang=en' : ''}`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 font-medium transition-colors"
-          title="Ouvrir le statut anonymisé au format JSON"
+          title={isEn ? 'Open anonymized status in JSON format' : 'Ouvrir le statut anonymisé au format JSON'}
         >
           <FileCode className="w-3 h-3" />
-          <span>Flux JSON</span>
+          <span>{isEn ? 'JSON Feed' : 'Flux JSON'}</span>
         </a>
         {onGoToStudio && (
           <>
@@ -560,14 +668,22 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             <button
               onClick={onGoToStudio}
               className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 font-medium transition-colors cursor-pointer"
-              title="Accès protégé au Studio"
+              title={isEn ? 'Protected Studio access' : 'Accès protégé au Studio'}
             >
               <Lock className="w-3 h-3" />
-              <span>Accès Paramètres</span>
+              <span>{isEn ? 'Settings' : 'Accès Paramètres'}</span>
             </button>
           </>
         )}
       </div>
+
+      <QrCodeModal
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        url={getPublicShareUrl()}
+        profileName={profile.name}
+        lang={lang}
+      />
     </div>
   );
 };

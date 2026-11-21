@@ -149,20 +149,54 @@ test('getSyncedCalendarEvents coalesces concurrent cold fetches and serves subse
   }
 });
 
-test('validateExternalCalendarUrl throws ExternalCalendarUrlError (400) and readLimitedIcsText enforces 5 MB cap', async () => {
-  const { ExternalCalendarUrlError, MAX_ICS_BYTES, readLimitedIcsText } = await import('./calendarSync.ts');
+test('validateExternalCalendarUrl throws ExternalCalendarUrlError (400) and readLimitedIcsText throws IcsTooLargeError (413)', async () => {
+  const {
+    ExternalCalendarUrlError,
+    IcsTooLargeError,
+    MAX_ICS_BYTES,
+    readLimitedIcsText,
+    assertPublicExternalHost,
+  } = await import('./calendarSync.ts');
   assert.equal(MAX_ICS_BYTES, 5 * 1024 * 1024);
 
   assert.throws(
     () => validateExternalCalendarUrl('http://127.0.0.1/cal.ics'),
     (err: any) => err instanceof ExternalCalendarUrlError && err.statusCode === 400
   );
+  // IPv6 loopback, ULA, link-local, and IPv4-mapped IPv6
+  assert.throws(() => validateExternalCalendarUrl('http://[::1]/cal.ics'), ExternalCalendarUrlError);
+  assert.throws(() => validateExternalCalendarUrl('http://[fe80::1]/cal.ics'), ExternalCalendarUrlError);
+  assert.throws(() => validateExternalCalendarUrl('http://[fd12:3456::1]/cal.ics'), ExternalCalendarUrlError);
+  assert.throws(() => validateExternalCalendarUrl('http://[::ffff:127.0.0.1]/cal.ics'), ExternalCalendarUrlError);
+  assert.throws(() => validateExternalCalendarUrl('http://100.64.0.1/cal.ics'), ExternalCalendarUrlError);
+
+  // DNS resolution SSRF defense
+  await assert.rejects(
+    () =>
+      assertPublicExternalHost('https://evil.example.com/cal.ics', async () => [
+        { address: '127.0.0.1', family: 4 },
+      ]),
+    (err: any) => err instanceof ExternalCalendarUrlError && err.statusCode === 400
+  );
+  await assert.rejects(
+    () =>
+      assertPublicExternalHost('https://evil6.example.com/cal.ics', async () => [
+        { address: 'fe80::1', family: 6 },
+      ]),
+    ExternalCalendarUrlError
+  );
+  await assertPublicExternalHost('https://calendar.example.com/cal.ics', async () => [
+    { address: '142.250.74.46', family: 4 },
+  ]);
 
   const oversizedHeaderRes = new Response('BEGIN:VCALENDAR', {
     status: 200,
     headers: { 'content-length': String(MAX_ICS_BYTES + 1) },
   });
-  await assert.rejects(() => readLimitedIcsText(oversizedHeaderRes), /trop volumineux/i);
+  await assert.rejects(
+    () => readLimitedIcsText(oversizedHeaderRes),
+    (err: any) => err instanceof IcsTooLargeError && err.statusCode === 413
+  );
 
   const smallOkRes = new Response('BEGIN:VCALENDAR\r\nEND:VCALENDAR', { status: 200 });
   const text = await readLimitedIcsText(smallOkRes);
@@ -170,7 +204,10 @@ test('validateExternalCalendarUrl throws ExternalCalendarUrlError (400) and read
 
   // Test small custom byte cap for multi-byte body check without allocating >5 MB string in RAM unnecessarily
   const bigBodyRes = new Response('é'.repeat(20), { status: 200 });
-  await assert.rejects(() => readLimitedIcsText(bigBodyRes, 10), /trop volumineux/i);
+  await assert.rejects(
+    () => readLimitedIcsText(bigBodyRes, 10),
+    (err: any) => err instanceof IcsTooLargeError && err.statusCode === 413
+  );
 });
 
 
