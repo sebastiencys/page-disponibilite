@@ -17,6 +17,7 @@ import {
 import {
   renderBadgeSvg,
   renderBadgePng,
+  buildBadgeTextPayload,
   ensureFontsLoaded,
   type BadgeStyle,
   type BadgeTheme,
@@ -259,6 +260,41 @@ export async function handleApiRequest(
     return true;
   }
 
+  // 2b. Dynamic JSON Badge (text version of the badge info)
+  if (
+    pathname === '/api/badge.json' ||
+    pathname === '/badge.json' ||
+    ((pathname === '/api/badge' || pathname === '/badge') &&
+      typeof query.format === 'string' &&
+      query.format.toLowerCase() === 'json')
+  ) {
+    let now = new Date();
+    if (query.time && typeof query.time === 'string') {
+      const parsed = new Date(query.time);
+      if (!isNaN(parsed.getTime())) now = parsed;
+    }
+
+    const currentEvents = await resolveCurrentEvents(now);
+    const avail = calculateAvailability(
+      now,
+      globalStore.schedule,
+      currentEvents,
+      globalStore.override,
+      serverTimezone
+    );
+
+    const payload = buildBadgeTextPayload(avail, {
+      name: sanitizeQueryField(query.name, globalStore.name),
+      role: sanitizeQueryField(query.role, globalStore.role),
+      company: sanitizeQueryField(query.company, globalStore.company),
+      timezone: serverTimezone,
+      now,
+    });
+
+    serveJson(res, payload);
+    return true;
+  }
+
   // 3. Current Live Status (JSON) — also supports ?time=<ISO> for simulation
   if (pathname === '/api/status') {
     let now = new Date();
@@ -396,4 +432,19 @@ function servePng(res: ServerResponse, pngBuffer: Buffer) {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.end(pngBuffer);
+}
+
+function sanitizeQueryField(val: unknown, fallback: string, maxLen = 120): string {
+  if (typeof val !== 'string') return fallback;
+  const trimmed = val.trim();
+  return trimmed ? trimmed.slice(0, maxLen) : fallback;
+}
+
+function serveJson(res: ServerResponse, payload: unknown) {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.end(JSON.stringify(payload, null, 2));
 }

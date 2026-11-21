@@ -62,17 +62,23 @@ export async function ensureFontsLoaded(): Promise<string[]> {
 
 import {
   renderBadgeSvg,
+  buildBadgeTextPayload,
   type BadgeStyle,
   type BadgeTheme,
   type BadgeOptions,
+  type BadgeTextOptions,
+  type BadgeTextPayload,
 } from './badgeSvg.ts';
 
-// Re-export pure SVG generation and types from badgeSvg
+// Re-export pure SVG/text generation and types from badgeSvg
 export {
   renderBadgeSvg,
+  buildBadgeTextPayload,
   type BadgeStyle,
   type BadgeTheme,
   type BadgeOptions,
+  type BadgeTextOptions,
+  type BadgeTextPayload,
 };
 
 /**

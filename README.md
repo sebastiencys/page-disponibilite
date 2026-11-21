@@ -13,9 +13,10 @@ Ce dépôt est **100% prêt pour Vercel** avec :
 1. Poussez ce dépôt sur votre compte GitHub.
 2. Rendez-vous sur [vercel.com/new](https://vercel.com/new) et sélectionnez votre dépôt.
 3. Cliquez sur **Deploy** (aucune variable d'environnement obligatoire n'est requise).
-4. Votre image dynamique est en ligne :
+4. Votre image dynamique et son flux texte JSON sont en ligne :
    - `https://votre-projet.vercel.app/api/badge.png`
    - `https://votre-projet.vercel.app/api/badge.svg`
+   - `https://votre-projet.vercel.app/api/badge.json` (version texte structurée : `status`, `title`, `subtitle`, `appointmentsLabel`, `lines`, `text`, `todayAppointmentsCount`, …)
 
 ---
 

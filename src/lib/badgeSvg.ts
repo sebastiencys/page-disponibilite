@@ -3,7 +3,12 @@
  * Zero Node.js / C++ dependencies — safe for both browser and serverless runtimes.
  */
 
-import { type AvailabilityResult, DEFAULT_PROFILE } from './availability.ts';
+import {
+  type AvailabilityResult,
+  DEFAULT_PROFILE,
+  formatTimeShort,
+  getZonedDateParts,
+} from './availability.ts';
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
 export type BadgeTheme = 'light' | 'dark' | 'transparent';
@@ -16,6 +21,42 @@ export interface BadgeOptions {
   company?: string;
   lang?: 'fr' | 'en';
   showSubtitle?: boolean;
+}
+
+export interface BadgeTextOptions {
+  name?: string;
+  role?: string;
+  company?: string;
+  timezone?: string;
+  now?: Date;
+}
+
+export interface BadgeTextPayload {
+  status: AvailabilityResult['status'];
+  state: AvailabilityResult['state'];
+  isWorkTime: boolean;
+  title: string;
+  subtitle: string;
+  appointmentsLabel: string | null;
+  lines: string[];
+  text: string;
+  todayAppointmentsCount: number;
+  todayAllDayAppointmentsCount: number;
+  nextFreeTime: string | null;
+  nextChangeAt: string | null;
+  colors: {
+    badge: string;
+    dot: string;
+  };
+  profile: {
+    name: string;
+    role: string;
+    company: string;
+  };
+  timezone: string;
+  localTime: string;
+  localDate: string;
+  updatedAt: string;
 }
 
 /**
@@ -46,6 +87,63 @@ export function formatTodayAppointmentsLabel(count: number, allDayCount: number 
   return safeCount === 1
     ? "1 RDV prévu aujourd'hui"
     : `${safeCount} RDV prévus aujourd'hui`;
+}
+
+/**
+ * Builds the pure text / JSON representation matching the exact lines rendered on the badges.
+ * Contains only anonymized availability status, counts, and public profile labels.
+ */
+export function buildBadgeTextPayload(
+  avail: AvailabilityResult,
+  options: BadgeTextOptions = {}
+): BadgeTextPayload {
+  const now = options.now ?? new Date();
+  const timezone = options.timezone || 'Europe/Paris';
+  const todayAppointmentsCount = Math.max(0, Math.floor(avail.todayAppointmentsCount ?? 0));
+  const todayAllDayAppointmentsCount = Math.max(
+    0,
+    Math.min(todayAppointmentsCount, Math.floor(avail.todayAllDayAppointmentsCount ?? 0))
+  );
+
+  const label = formatTodayAppointmentsLabel(todayAppointmentsCount, todayAllDayAppointmentsCount);
+  const appointmentsLabel = label ? label : null;
+  const lines = appointmentsLabel
+    ? [avail.title, avail.subtitle, appointmentsLabel]
+    : [avail.title, avail.subtitle];
+  const text = appointmentsLabel
+    ? `${avail.title} — ${avail.subtitle} • ${appointmentsLabel}`
+    : `${avail.title} — ${avail.subtitle}`;
+
+  const zoned = getZonedDateParts(now, timezone);
+  const localDate = `${zoned.year}-${String(zoned.month).padStart(2, '0')}-${String(zoned.day).padStart(2, '0')}`;
+
+  return {
+    status: avail.status,
+    state: avail.state,
+    isWorkTime: avail.isWorkTime,
+    title: avail.title,
+    subtitle: avail.subtitle,
+    appointmentsLabel,
+    lines,
+    text,
+    todayAppointmentsCount,
+    todayAllDayAppointmentsCount,
+    nextFreeTime: avail.nextFreeTime ?? null,
+    nextChangeAt: avail.nextChangeDate ? avail.nextChangeDate.toISOString() : null,
+    colors: {
+      badge: avail.badgeColor,
+      dot: avail.dotColor,
+    },
+    profile: {
+      name: options.name ?? DEFAULT_PROFILE.name,
+      role: options.role ?? DEFAULT_PROFILE.role,
+      company: options.company ?? DEFAULT_PROFILE.company,
+    },
+    timezone,
+    localTime: formatTimeShort(now, timezone),
+    localDate,
+    updatedAt: now.toISOString(),
+  };
 }
 
 /**

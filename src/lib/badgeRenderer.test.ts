@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateAvailability, type ScheduleConfig } from './availability.ts';
-import { renderBadgeSvg, renderBadgePng } from './badgeRenderer.ts';
+import { renderBadgeSvg, renderBadgePng, buildBadgeTextPayload } from './badgeRenderer.ts';
 
 const TEST_SCHEDULE: ScheduleConfig = {
   timezone: 'Europe/Paris',
@@ -226,4 +226,73 @@ test('badges specify (journée entière) when today appointments span full day',
 
   const pngAllDay = renderBadgePng(availAllDay, { style: 'card' });
   assert.ok(pngAllDay.length > 100);
+});
+
+test('buildBadgeTextPayload returns structured text lines matching badge labels', () => {
+  const nowZero = new Date('2026-11-22T10:00:00+04:00');
+  const availZero = calculateAvailability(nowZero, TEST_SCHEDULE, [], undefined, 'Indian/Reunion');
+  const payloadZero = buildBadgeTextPayload(availZero, {
+    name: 'Dr Test',
+    role: 'Médecin',
+    company: 'Clinique',
+    timezone: 'Indian/Reunion',
+    now: nowZero,
+  });
+
+  assert.equal(payloadZero.status, 'OFF_HOURS');
+  assert.equal(payloadZero.state, 'off');
+  assert.equal(payloadZero.todayAppointmentsCount, 0);
+  assert.equal(payloadZero.todayAllDayAppointmentsCount, 0);
+  assert.equal(payloadZero.appointmentsLabel, null);
+  assert.deepEqual(payloadZero.lines, [availZero.title, availZero.subtitle]);
+  assert.equal(payloadZero.text, `${availZero.title} — ${availZero.subtitle}`);
+  assert.equal(payloadZero.localDate, '2026-11-22');
+  assert.equal(payloadZero.localTime, '10h00');
+  assert.equal(payloadZero.timezone, 'Indian/Reunion');
+  assert.deepEqual(payloadZero.profile, {
+    name: 'Dr Test',
+    role: 'Médecin',
+    company: 'Clinique',
+  });
+
+  const nowAllDay = new Date('2026-11-23T10:00:00+04:00');
+  const availAllDay = calculateAvailability(
+    nowAllDay,
+    TEST_SCHEDULE,
+    [
+      {
+        id: 'all-day-mon',
+        title: 'Secret Title Must Not Leak',
+        start: '2026-11-23T00:00:00+04:00',
+        end: '2026-11-24T00:00:00+04:00',
+        isAllDay: true,
+        allDayStartDate: '2026-11-23',
+        allDayEndDate: '2026-11-24',
+        isBusy: true,
+      },
+    ],
+    undefined,
+    'Indian/Reunion'
+  );
+  const payloadAllDay = buildBadgeTextPayload(availAllDay, {
+    timezone: 'Indian/Reunion',
+    now: nowAllDay,
+  });
+
+  assert.equal(payloadAllDay.status, 'BUSY');
+  assert.equal(payloadAllDay.todayAppointmentsCount, 1);
+  assert.equal(payloadAllDay.todayAllDayAppointmentsCount, 1);
+  assert.equal(payloadAllDay.appointmentsLabel, "1 RDV (journée entière) aujourd'hui");
+  assert.equal(payloadAllDay.lines.length, 3);
+  assert.equal(payloadAllDay.lines[2], "1 RDV (journée entière) aujourd'hui");
+  assert.ok(payloadAllDay.text.includes("• 1 RDV (journée entière) aujourd'hui"));
+  assert.ok(!JSON.stringify(payloadAllDay).includes('Secret Title Must Not Leak'));
+
+  // Mixed day: 2 appointments with 1 all-day
+  const payloadMixed = buildBadgeTextPayload({
+    ...availAllDay,
+    todayAppointmentsCount: 2,
+    todayAllDayAppointmentsCount: 1,
+  });
+  assert.equal(payloadMixed.appointmentsLabel, "2 RDV (dont journée entière) aujourd'hui");
 });

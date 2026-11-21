@@ -64,6 +64,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
   // Build the live direct badge URL with all profile parameters
   const badgeUrl = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`;
+  const badgeJsonUrl = `${appBaseUrl}/api/badge.json`;
   const publicPageUrl = `${appBaseUrl}?view=public`;
 
   const todayCount = Math.max(0, Math.floor(availability.todayAppointmentsCount ?? 0));
@@ -734,15 +735,27 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     <Sparkles className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
                     Rendu fidèle pour <strong>{emailClientTab.toUpperCase()}</strong>
                   </span>
-                  <a
-                    href={badgeUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Tester le lien image direct
-                  </a>
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={badgeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Tester le lien image direct
+                    </a>
+                    <span className="text-slate-300 dark:text-slate-700">•</span>
+                    <a
+                      href={badgeJsonUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-medium"
+                    >
+                      <FileCode className="w-3 h-3" />
+                      JSON texte
+                    </a>
+                  </div>
                 </div>
               </div>
             </div>
@@ -905,6 +918,49 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 <div className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200 dark:border-slate-800">
                   {generateMarkdownSnippet()}
                 </div>
+              </div>
+
+              {/* Option D: JSON Text API */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+                    Option 4 : API JSON (Informations en version texte)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={badgeJsonUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 shadow-xs transition-all shrink-0"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Ouvrir
+                    </a>
+                    <button
+                      onClick={() => handleCopyCode(badgeJsonUrl, 'json')}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 cursor-pointer shadow-xs transition-all shrink-0"
+                    >
+                      {copiedFormat === 'json' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          URL JSON copiée !
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copier l'URL JSON
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-mono text-[11px] p-2.5 rounded-lg truncate border border-slate-200 dark:border-slate-800">
+                  {badgeJsonUrl}
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Renvoie en temps réel le statut anonymisé et les lignes de texte des badges (<code className="font-mono text-slate-700 dark:text-slate-300">title</code>, <code className="font-mono text-slate-700 dark:text-slate-300">subtitle</code>, <code className="font-mono text-slate-700 dark:text-slate-300">appointmentsLabel</code>, <code className="font-mono text-slate-700 dark:text-slate-300">lines</code>, <code className="font-mono text-slate-700 dark:text-slate-300">text</code>, <code className="font-mono text-slate-700 dark:text-slate-300">todayAppointmentsCount</code>) pour scripts, raccourcis ou widgets.
+                </p>
               </div>
             </div>
           </div>
