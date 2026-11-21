@@ -4,15 +4,17 @@
  */
 
 import {
+  type AppLang,
   type AvailabilityResult,
   type CalendarSummaryItem,
   DEFAULT_PROFILE,
   formatTimeShort,
   getZonedDateParts,
+  normalizeAppLang,
 } from './availability.ts';
 
 export type BadgeStyle = 'pill' | 'dot' | 'card' | 'signature';
-export type BadgeTheme = 'light' | 'dark' | 'transparent';
+export type BadgeTheme = 'light' | 'dark' | 'transparent' | 'transparent-dark';
 
 export interface BadgeOptions {
   style?: BadgeStyle;
@@ -30,10 +32,12 @@ export interface BadgeTextOptions {
   company?: string;
   timezone?: string;
   now?: Date;
+  lang?: AppLang;
   calendars?: CalendarSummaryItem[];
 }
 
 export interface BadgeTextPayload {
+  lang: AppLang;
   status: AvailabilityResult['status'];
   state: AvailabilityResult['state'];
   isWorkTime: boolean;
@@ -88,7 +92,12 @@ function escapeXml(unsafe: string): string {
 }
 
 const VALID_BADGE_STYLES: ReadonlySet<string> = new Set(['pill', 'dot', 'card', 'signature']);
-const VALID_BADGE_THEMES: ReadonlySet<string> = new Set(['light', 'dark', 'transparent']);
+const VALID_BADGE_THEMES: ReadonlySet<string> = new Set([
+  'light',
+  'dark',
+  'transparent',
+  'transparent-dark',
+]);
 
 /**
  * Normalizes any style query parameter to a valid BadgeStyle (defaults safely to 'pill').
@@ -128,10 +137,27 @@ export function truncateBadgeText(text: string, maxChars: number): string {
 /**
  * Formats the today appointments count label for the 3rd badge line
  */
-export function formatTodayAppointmentsLabel(count: number, allDayCount: number = 0): string {
+export function formatTodayAppointmentsLabel(
+  count: number,
+  allDayCount: number = 0,
+  lang: AppLang = 'fr'
+): string {
   const safeCount = Math.max(0, Math.floor(count || 0));
   const safeAllDay = Math.max(0, Math.min(safeCount, Math.floor(allDayCount || 0)));
   if (safeCount <= 0) return '';
+  if (lang === 'en') {
+    if (safeAllDay > 0) {
+      if (safeAllDay === safeCount) {
+        return safeCount === 1
+          ? '1 appointment (all-day) today'
+          : `${safeCount} appointments (all-day) today`;
+      }
+      return `${safeCount} appointments (incl. all-day) today`;
+    }
+    return safeCount === 1
+      ? '1 appointment scheduled today'
+      : `${safeCount} appointments scheduled today`;
+  }
   if (safeAllDay > 0) {
     if (safeAllDay === safeCount) {
       return `${safeCount} RDV (journée entière) aujourd'hui`;
@@ -153,13 +179,14 @@ export function buildBadgeTextPayload(
 ): BadgeTextPayload {
   const now = options.now ?? new Date();
   const timezone = options.timezone || 'Europe/Paris';
+  const lang = normalizeAppLang(options.lang, 'fr');
   const todayAppointmentsCount = Math.max(0, Math.floor(avail.todayAppointmentsCount ?? 0));
   const todayAllDayAppointmentsCount = Math.max(
     0,
     Math.min(todayAppointmentsCount, Math.floor(avail.todayAllDayAppointmentsCount ?? 0))
   );
 
-  const label = formatTodayAppointmentsLabel(todayAppointmentsCount, todayAllDayAppointmentsCount);
+  const label = formatTodayAppointmentsLabel(todayAppointmentsCount, todayAllDayAppointmentsCount, lang);
   const appointmentsLabel = label ? label : null;
   const lines = appointmentsLabel
     ? [avail.title, avail.subtitle, appointmentsLabel]
@@ -172,6 +199,7 @@ export function buildBadgeTextPayload(
   const localDate = `${zoned.year}-${String(zoned.month).padStart(2, '0')}-${String(zoned.day).padStart(2, '0')}`;
 
   return {
+    lang,
     status: avail.status,
     state: avail.state,
     isWorkTime: avail.isWorkTime,
@@ -196,7 +224,7 @@ export function buildBadgeTextPayload(
       company: options.company ?? DEFAULT_PROFILE.company,
     },
     timezone,
-    localTime: formatTimeShort(now, timezone),
+    localTime: formatTimeShort(now, timezone, lang),
     localDate,
     updatedAt: now.toISOString(),
   };
@@ -211,18 +239,40 @@ export function renderBadgeSvg(
 ): string {
   const style = normalizeBadgeStyle(options.style, 'pill');
   const theme = normalizeBadgeTheme(options.theme, 'light');
+  const lang = normalizeAppLang(options.lang, 'fr');
+  const isEn = lang === 'en';
   const name = options.name ?? DEFAULT_PROFILE.name;
   const role = options.role ?? DEFAULT_PROFILE.role;
   const company = options.company ?? DEFAULT_PROFILE.company;
 
   const isDark = theme === 'dark';
-  const isTransparent = theme === 'transparent';
+  const isTransparentLight = theme === 'transparent';
+  const isTransparentDark = theme === 'transparent-dark';
+  const isTransparent = isTransparentLight || isTransparentDark;
   const bgColor = isTransparent ? 'none' : isDark ? '#0f172a' : '#ffffff';
-  const borderColor = isTransparent ? 'rgba(148,163,184,0.45)' : isDark ? '#334155' : '#e2e8f0';
-  const dotPillStroke = isTransparent ? '#ffffff' : bgColor;
-  const textPrimary = isTransparent ? '#334155' : isDark ? '#f8fafc' : '#0f172a';
-  const textSecondary = isTransparent ? '#64748b' : isDark ? '#94a3b8' : '#64748b';
-  const countLineColor = isDark ? '#a5b4fc' : '#4338ca';
+  const borderColor = isTransparentDark
+    ? 'rgba(148,163,184,0.35)'
+    : isTransparentLight
+    ? 'rgba(148,163,184,0.45)'
+    : isDark
+    ? '#334155'
+    : '#e2e8f0';
+  const dotPillStroke = isTransparentDark ? '#0f172a' : isTransparentLight ? '#ffffff' : bgColor;
+  const textPrimary = isTransparentDark
+    ? '#f8fafc'
+    : isTransparentLight
+    ? '#334155'
+    : isDark
+    ? '#f8fafc'
+    : '#0f172a';
+  const textSecondary = isTransparentDark
+    ? '#cbd5e1'
+    : isTransparentLight
+    ? '#64748b'
+    : isDark
+    ? '#94a3b8'
+    : '#64748b';
+  const countLineColor = isDark || isTransparentDark ? '#a5b4fc' : '#4338ca';
   const dotColor = avail.dotColor;
   const badgeColor = avail.badgeColor;
 
@@ -232,8 +282,13 @@ export function renderBadgeSvg(
     Math.min(todayCount, Math.floor(avail.todayAllDayAppointmentsCount ?? 0))
   );
   const hasTodayRdvs = todayCount > 0;
-  const rawTodayLabel = formatTodayAppointmentsLabel(todayCount, todayAllDayCount);
+  const rawTodayLabel = formatTodayAppointmentsLabel(todayCount, todayAllDayCount, lang);
   const safeTodayLabel = escapeXml(truncateBadgeText(rawTodayLabel, style === 'card' ? 42 : 46));
+  const accessibleTitle = escapeXml(
+    rawTodayLabel
+      ? `${avail.title} — ${avail.subtitle} (${rawTodayLabel})`
+      : `${avail.title} — ${avail.subtitle}`
+  );
 
   const titleMax = style === 'card' ? 35 : style === 'signature' ? 38 : 38;
   const subMax = style === 'card' ? 42 : style === 'signature' ? 45 : 44;
@@ -274,6 +329,7 @@ export function renderBadgeSvg(
     if (!hasTodayRdvs) {
       return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">
+  <title>${accessibleTitle}</title>
   <defs>
     <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
       <feGaussianBlur stdDeviation="2.5" result="blur" />
@@ -297,6 +353,7 @@ export function renderBadgeSvg(
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="38" viewBox="0 0 ${svgW} 38" fill="none">
+  <title>${accessibleTitle}</title>
   <defs>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&amp;display=swap');
@@ -327,6 +384,7 @@ export function renderBadgeSvg(
     if (!hasTodayRdvs) {
       return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="54" viewBox="0 0 400 54" fill="none">
+  <title>${accessibleTitle}</title>
   ${fontDef}
   <!-- Pill Container -->
   <rect x="1" y="1" width="398" height="52" rx="26" fill="url(#cardBgGrad)" stroke="${borderColor}" stroke-width="1.5"/>
@@ -346,6 +404,7 @@ export function renderBadgeSvg(
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="400" height="70" viewBox="0 0 400 70" fill="none">
+  <title>${accessibleTitle}</title>
   ${fontDef}
   <!-- Pill Container (3 lines) -->
   <rect x="1" y="1" width="398" height="68" rx="34" fill="url(#cardBgGrad)" stroke="${borderColor}" stroke-width="1.5"/>
@@ -376,6 +435,7 @@ export function renderBadgeSvg(
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="380" height="${svgH}" viewBox="0 0 380 ${svgH}" fill="none">
+  <title>${accessibleTitle}</title>
   ${fontDef}
   <!-- Outer Card -->
   <rect x="1" y="1" width="378" height="${outerH}" rx="14" fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5"/>
@@ -383,7 +443,7 @@ export function renderBadgeSvg(
   <!-- Header row: Dot + Name + Right Tag -->
   <circle cx="22" cy="20" r="4.5" fill="${dotColor}"/>
   <text x="34" y="24" font-size="14.5" font-weight="700" fill="${textPrimary}" letter-spacing="-0.01em">${safeName}</text>
-  <text x="362" y="23" text-anchor="end" font-size="11" font-weight="600" fill="${textSecondary}">Disponibilité en direct</text>
+  <text x="362" y="23" text-anchor="end" font-size="11" font-weight="600" fill="${textSecondary}">${isEn ? 'Live availability' : 'Disponibilité en direct'}</text>
 
   <!-- Inner Status Container (Multiligne) -->
   <rect x="14" y="36" width="352" height="${innerH}" rx="10" fill="${badgeColor}" fill-opacity="0.12" stroke="${badgeColor}" stroke-opacity="0.28" stroke-width="1.2"/>
@@ -415,9 +475,21 @@ export function renderBadgeSvg(
     .join('')
     .toUpperCase() || 'DL';
 
-  const rawRoleText = role ? (company ? `${role} • ${company}` : role) : 'Disponibilité en direct';
+  const rawRoleText = role
+    ? company
+      ? `${role} • ${company}`
+      : role
+    : isEn
+    ? 'Live availability'
+    : 'Disponibilité en direct';
   const roleText = escapeXml(truncateBadgeText(rawRoleText, 46));
-  const avatarBg = isTransparent ? 'rgba(148,163,184,0.16)' : isDark ? '#1e293b' : '#f1f5f9';
+  const avatarBg = isTransparentDark
+    ? 'rgba(255,255,255,0.12)'
+    : isTransparentLight
+    ? 'rgba(148,163,184,0.16)'
+    : isDark
+    ? '#1e293b'
+    : '#f1f5f9';
 
   const sigSvgH = hasTodayRdvs ? 132 : 114;
   const sigOuterH = sigSvgH - 2;
@@ -433,6 +505,7 @@ export function renderBadgeSvg(
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="${sigSvgH}" viewBox="0 0 480 ${sigSvgH}" fill="none">
+  <title>${accessibleTitle}</title>
   ${fontDef}
   <!-- Outer Card -->
   <rect x="1" y="1" width="478" height="${sigOuterH}" rx="16" fill="${bgColor}" stroke="${borderColor}" stroke-width="1.5"/>

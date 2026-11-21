@@ -23,8 +23,9 @@ import {
   FileCode,
   UserCheck,
   Clock,
+  Globe,
 } from 'lucide-react';
-import { type AvailabilityResult, DEFAULT_PROFILE, DEFAULT_SCHEDULE } from '../lib/availability.ts';
+import { type AppLang, type AvailabilityResult, DEFAULT_PROFILE, DEFAULT_SCHEDULE } from '../lib/availability.ts';
 import type { BadgeStyle, BadgeTheme } from '../lib/badgeRenderer.ts';
 import { escapeHtml } from '../lib/badgeSvg.ts';
 import { copyTextToClipboard } from '../lib/clipboard.ts';
@@ -67,6 +68,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 }) => {
   const [badgeStyle, setBadgeStyle] = useState<BadgeStyle>('pill');
   const [badgeTheme, setBadgeTheme] = useState<BadgeTheme>('light');
+  const [badgeLang, setBadgeLang] = useState<AppLang>('fr');
   const [format, setFormat] = useState<'png' | 'svg'>('png');
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [emailClientTab, setEmailClientTab] = useState<'gmail' | 'outlook' | 'apple'>('gmail');
@@ -170,6 +172,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     name: profile.name,
     role: profile.role,
     company: profile.company,
+    lang: badgeLang,
   });
   const previewBadgeUrl = buildBadgePreviewUrl(
     appBaseUrl,
@@ -180,10 +183,11 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       name: profile.name,
       role: profile.role,
       company: profile.company,
+      lang: badgeLang,
     },
     refreshKey
   );
-  const badgeJsonUrl = `${appBaseUrl}/api/badge.json`;
+  const badgeJsonUrl = `${appBaseUrl}/api/badge.json${badgeLang === 'en' ? '?lang=en' : ''}`;
   const publicPageUrl = `${appBaseUrl}?view=public`;
 
   const todayCount = Math.max(0, Math.floor(availability.todayAppointmentsCount ?? 0));
@@ -213,8 +217,19 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     const safeBookingUrl = profile.bookingUrl ? escapeHtml(profile.bookingUrl) : '';
     const safePublicUrl = escapeHtml(publicPageUrl);
 
-    const badgeSrc = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(rawName)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}`;
+    const badgeSrc = buildBadgePublicUrl(appBaseUrl, {
+      format,
+      style: badgeStyle,
+      theme: badgeTheme,
+      name: rawName,
+      role: profile.role || DEFAULT_PROFILE.role,
+      company: profile.company || DEFAULT_PROFILE.company,
+      lang: badgeLang,
+    });
     const safeBadgeSrc = escapeHtml(badgeSrc);
+    const bookText = badgeLang === 'en' ? '📅 Book a meeting directly' : '📅 Prendre rendez-vous directement';
+    const liveStatusText = badgeLang === 'en' ? 'Live availability' : 'Disponibilité en temps réel';
+    const clickCalendarText = badgeLang === 'en' ? '(click to view calendar)' : "(cliquez pour voir l'agenda)";
 
     // Style 1: Signature Complète (All-in-one banner 480x114 or 480x132 with RDV line)
     if (badgeStyle === 'signature') {
@@ -223,7 +238,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     <td style="padding-top: 4px; padding-bottom: 8px;">
       <!-- DISPOLIVE BANNIÈRE SIGNATURE COMPLÈTE -->
       <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
-        <img src="${safeBadgeSrc}" alt="Signature et disponibilité en direct de ${safeName}" width="480" style="display: block; border: 0; outline: none; border-radius: 14px; max-width: 100%; height: auto;" />
+        <img src="${safeBadgeSrc}" alt="${badgeLang === 'en' ? `Live availability signature for ${safeName}` : `Signature et disponibilité en direct de ${safeName}`}" width="480" style="display: block; border: 0; outline: none; border-radius: 14px; max-width: 100%; height: auto;" />
       </a>
     </td>
   </tr>
@@ -232,7 +247,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       ? `<tr>
     <td style="font-size: 12px; color: #4f46e5; padding-top: 4px;">
       <a href="${safeBookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
-        📅 Prendre rendez-vous directement
+        ${bookText}
       </a>
     </td>
   </tr>`
@@ -257,12 +272,12 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
         <tr>
           <td valign="middle" style="vertical-align: middle; padding-right: 8px;">
             <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; display: inline-block;">
-              <img src="${safeBadgeSrc}" alt="Statut en direct" height="36" style="display: block; border: 0; outline: none; height: 36px; width: auto;" />
+              <img src="${safeBadgeSrc}" alt="${liveStatusText}" height="36" style="display: block; border: 0; outline: none; height: 36px; width: auto;" />
             </a>
           </td>
           <td valign="middle" style="vertical-align: middle; font-size: 12px; color: #475569;">
             <a href="${safePublicUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">
-              <strong style="color: #0f172a;">Disponibilité en temps réel</strong> (cliquez pour voir l'agenda)
+              <strong style="color: #0f172a;">${liveStatusText}</strong> ${clickCalendarText}
             </a>
           </td>
         </tr>
@@ -274,7 +289,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       ? `<tr>
     <td style="font-size: 12px; color: #4f46e5; padding-top: 2px;">
       <a href="${safeBookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
-        📅 Prendre rendez-vous directement
+        ${bookText}
       </a>
     </td>
   </tr>`
@@ -306,7 +321,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       ? `<tr>
     <td style="font-size: 12px; color: #4f46e5;">
       <a href="${safeBookingUrl}" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; font-weight: 500;">
-        📅 Prendre rendez-vous directement
+        ${bookText}
       </a>
     </td>
   </tr>`
@@ -535,28 +550,59 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             </div>
 
             {/* Theme Picker */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
-                Thème de fond
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'light', label: 'Clair' },
-                  { id: 'dark', label: 'Sombre' },
-                  { id: 'transparent', label: 'Transparent' },
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setBadgeTheme(t.id as BadgeTheme)}
-                    className={`py-2 px-3 text-xs rounded-lg border font-medium cursor-pointer transition-all ${
-                      badgeTheme === t.id
-                        ? 'border-slate-900 dark:border-indigo-500 bg-slate-900 dark:bg-indigo-600 text-white'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5">
+                  Thème de fond
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: 'light', label: 'Clair' },
+                    { id: 'dark', label: 'Sombre' },
+                    { id: 'transparent', label: 'Transparent' },
+                    { id: 'transparent-dark', label: 'Transp. nuit' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setBadgeTheme(t.id as BadgeTheme)}
+                      className={`py-2 px-2 text-xs rounded-lg border font-medium cursor-pointer transition-all whitespace-nowrap ${
+                        badgeTheme === t.id
+                          ? 'border-slate-900 dark:border-indigo-500 bg-slate-900 dark:bg-indigo-600 text-white'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Language Picker */}
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+                  <span>Langue des badges</span>
+                </span>
+                <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                  {[
+                    { id: 'fr', label: 'Français' },
+                    { id: 'en', label: 'English' },
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setBadgeLang(opt.id as AppLang)}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        badgeLang === opt.id
+                          ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -796,6 +842,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   className={`p-4 rounded-xl transition-all ${
                     badgeTheme === 'dark'
                       ? 'bg-slate-950 border border-slate-800'
+                      : badgeTheme === 'transparent-dark'
+                      ? 'bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-900 border border-dashed border-slate-700'
                       : badgeTheme === 'transparent'
                       ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border border-dashed border-slate-300 dark:border-slate-600'
                       : emailClientTab === 'outlook'
@@ -814,7 +862,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       </div>
                       <div className="my-1 block">
                         <img
-                          key={`signature-${format}-${refreshKey}`}
+                          key={`signature-${format}-${badgeLang}-${refreshKey}`}
                           src={previewBadgeUrl}
                           alt="Signature complète et statut en direct"
                           className="max-w-full rounded-xl shadow-xs transition-transform hover:scale-[1.01]"
@@ -826,26 +874,26 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   {/* STYLE 2: POINT MINIMALISTE */}
                   {badgeStyle === 'dot' && (
                     <div>
-                      <div className={`text-sm font-bold ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
-                      <div className={`text-xs mb-2.5 ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <div className={`text-sm font-bold ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
+                      <div className={`text-xs mb-2.5 ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
                       <div className={`my-1.5 flex items-center gap-3 p-2.5 rounded-lg border w-fit shadow-xs ${
-                        badgeTheme === 'dark'
+                        badgeTheme === 'dark' || badgeTheme === 'transparent-dark'
                           ? 'bg-slate-900 border-slate-700'
                           : badgeTheme === 'transparent'
                           ? 'bg-white/70 border-slate-300 dark:border-slate-600'
                           : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
                       }`}>
                         <img
-                          key={`dot-${format}-${refreshKey}`}
+                          key={`dot-${format}-${badgeLang}-${refreshKey}`}
                           src={previewBadgeUrl}
                           alt="Point de disponibilité"
                           className="h-9 w-auto shrink-0"
                         />
                         <div className="text-xs leading-snug">
-                          <span className={`font-semibold block ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-800 dark:text-slate-100'}`}>Disponibilité en direct</span>
-                          <span className={`text-[11px] ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>Statut calculé en temps réel</span>
+                          <span className={`font-semibold block ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-100' : 'text-slate-800 dark:text-slate-100'}`}>Disponibilité en direct</span>
+                          <span className={`text-[11px] ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>Statut calculé en temps réel</span>
                         </div>
                       </div>
                     </div>
@@ -854,16 +902,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   {/* STYLE 3: CARTE COMPACTE */}
                   {badgeStyle === 'card' && (
                     <div>
-                      <div className={`text-sm font-bold ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
-                      <div className={`text-xs mb-2 ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <div className={`text-sm font-bold ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
+                      <div className={`text-xs mb-2 ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
-                      <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         Widget encadré {cardDimLabel} : statut, horaire{hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :
                       </div>
                       <div className="my-1 inline-block">
                         <img
-                          key={`card-${format}-${refreshKey}`}
+                          key={`card-${format}-${badgeLang}-${refreshKey}`}
                           src={previewBadgeUrl}
                           alt="Carte compacte de disponibilité"
                           className="max-w-full rounded-xl shadow-xs transition-transform hover:scale-[1.01]"
@@ -875,16 +923,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   {/* STYLE 4: PILL MODERNE */}
                   {badgeStyle === 'pill' && (
                     <div>
-                      <div className={`text-sm font-bold ${badgeTheme === 'dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
-                      <div className={`text-xs mb-2 ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <div className={`text-sm font-bold ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-100' : 'text-slate-900 dark:text-slate-100'}`}>{profile.name}</div>
+                      <div className={`text-xs mb-2 ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {profile.role} {profile.company && `• ${profile.company}`}
                       </div>
-                      <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                      <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         Capsule {pillDimLabel} : statut, horaire{hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :
                       </div>
                       <div className="my-1 inline-block">
                         <img
-                          key={`pill-${format}-${refreshKey}`}
+                          key={`pill-${format}-${badgeLang}-${refreshKey}`}
                           src={previewBadgeUrl}
                           alt="Capsule pill de disponibilité"
                           className="max-w-full rounded-full shadow-xs transition-transform hover:scale-[1.01]"
@@ -894,8 +942,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   )}
 
                   {profile.bookingUrl && (
-                    <div className="mt-3 text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-                      📅 Prendre rendez-vous directement
+                    <div className={`mt-3 text-xs font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-indigo-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                      {badgeLang === 'en' ? '📅 Book a meeting directly' : '📅 Prendre rendez-vous directement'}
                     </div>
                   )}
                 </div>
@@ -1222,6 +1270,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[70px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent-dark'
+                ? 'bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-900 border-slate-700'
                 : badgeTheme === 'transparent'
                 ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
                 : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
@@ -1236,6 +1286,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     name: profile.name,
                     role: profile.role,
                     company: profile.company,
+                    lang: badgeLang,
                   },
                   refreshKey
                 )}
@@ -1275,6 +1326,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[120px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent-dark'
+                ? 'bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-900 border-slate-700'
                 : badgeTheme === 'transparent'
                 ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
                 : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
@@ -1289,6 +1342,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     name: profile.name,
                     role: profile.role,
                     company: profile.company,
+                    lang: badgeLang,
                   },
                   refreshKey
                 )}
@@ -1328,6 +1382,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[110px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent-dark'
+                ? 'bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-900 border-slate-700'
                 : badgeTheme === 'transparent'
                 ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
                 : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
@@ -1342,6 +1398,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     name: profile.name,
                     role: profile.role,
                     company: profile.company,
+                    lang: badgeLang,
                   },
                   refreshKey
                 )}
@@ -1381,6 +1438,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
             <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[60px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
+                : badgeTheme === 'transparent-dark'
+                ? 'bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-900 border-slate-700'
                 : badgeTheme === 'transparent'
                 ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/80 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
                 : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
@@ -1395,6 +1454,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     name: profile.name,
                     role: profile.role,
                     company: profile.company,
+                    lang: badgeLang,
                   },
                   refreshKey
                 )}

@@ -4,6 +4,16 @@
  */
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday, ...
+export type AppLang = 'fr' | 'en';
+
+export function normalizeAppLang(value: unknown, fallback: AppLang = 'fr'): AppLang {
+  if (typeof value === 'string') {
+    const clean = value.trim().toLowerCase();
+    if (clean === 'en' || clean.startsWith('en-') || clean.startsWith('en_')) return 'en';
+    if (clean === 'fr' || clean.startsWith('fr-') || clean.startsWith('fr_')) return 'fr';
+  }
+  return fallback;
+}
 
 export interface DaySchedule {
   enabled: boolean;
@@ -123,10 +133,11 @@ function parseTimeToMinutes(timeStr: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
-function formatMinutesToTime(minutes: number): string {
+function formatMinutesToTime(minutes: number, lang: AppLang = 'fr'): string {
   const h = Math.floor(minutes / 60) % 24;
   const m = minutes % 60;
-  return `${h.toString().padStart(2, '0')}h${m > 0 ? m.toString().padStart(2, '0') : '00'}`;
+  const sep = lang === 'en' ? ':' : 'h';
+  return `${h.toString().padStart(2, '0')}${sep}${m > 0 ? m.toString().padStart(2, '0') : '00'}`;
 }
 
 export interface EffectiveLunchBreak {
@@ -250,7 +261,12 @@ export function getZonedDateParts(date: Date, timeZone: string = 'Europe/Paris')
   }
 }
 
-export function formatTimeShort(date: Date, timeZone: string = 'Europe/Paris'): string {
+export function formatTimeShort(
+  date: Date,
+  timeZone: string = 'Europe/Paris',
+  lang: AppLang = 'fr'
+): string {
+  const sep = lang === 'en' ? ':' : 'h';
   try {
     const formatter = new Intl.DateTimeFormat('fr-FR', {
       timeZone,
@@ -265,11 +281,11 @@ export function formatTimeShort(date: Date, timeZone: string = 'Europe/Paris'): 
       if (p.type === 'hour') hour = p.value.padStart(2, '0');
       if (p.type === 'minute') minute = p.value.padStart(2, '0');
     }
-    if (hour && minute) return `${hour}h${minute}`;
+    if (hour && minute) return `${hour}${sep}${minute}`;
   } catch {}
   const h = date.getHours().toString().padStart(2, '0');
   const m = date.getMinutes().toString().padStart(2, '0');
-  return `${h}h${m}`;
+  return `${h}${sep}${m}`;
 }
 
 /**
@@ -412,6 +428,7 @@ export function normalizeEventsForSchedule(
 }
 
 const DAY_NAMES_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+const DAY_NAMES_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export interface TodayAppointmentsStats {
   total: number;
@@ -489,7 +506,8 @@ export function getNextWorkStart(
   schedule: ScheduleConfig,
   timeZone: string = schedule.timezone || 'Europe/Paris',
   events: CalendarEvent[] = [],
-  preNormalizedSortedEvents?: Array<CalendarEvent & { startDate: Date; endDate: Date }>
+  preNormalizedSortedEvents?: Array<CalendarEvent & { startDate: Date; endDate: Date }>,
+  lang: AppLang = 'fr'
 ): { date: Date; text: string } {
   const bufferMs = (schedule.bufferMinutes || 0) * 60 * 1000;
   const sortedEvents =
@@ -556,24 +574,35 @@ export function getNextWorkStart(
 
     if (cursor < workEndMs) {
       const foundDate = new Date(cursor);
-      const timeStr = formatTimeShort(foundDate, timeZone);
-      const dayLabel = DAY_NAMES_FR[dayOfWeek];
+      const timeStr = formatTimeShort(foundDate, timeZone, lang);
+      const dayLabel = (lang === 'en' ? DAY_NAMES_EN : DAY_NAMES_FR)[dayOfWeek];
 
       let text: string;
-      if (offset === 0) {
-        text = `Aujourd'hui à ${timeStr}`;
-      } else if (offset <= 6) {
-        text = `${dayLabel} à ${timeStr}`;
+      if (lang === 'en') {
+        if (offset === 0) {
+          text = `Today at ${timeStr}`;
+        } else if (offset <= 6) {
+          text = `${dayLabel} at ${timeStr}`;
+        } else {
+          const fp = getZonedDateParts(foundDate, timeZone);
+          text = `${dayLabel} ${String(fp.month).padStart(2, '0')}/${String(fp.day).padStart(2, '0')} at ${timeStr}`;
+        }
       } else {
-        const fp = getZonedDateParts(foundDate, timeZone);
-        text = `${dayLabel} ${String(fp.day).padStart(2, '0')}/${String(fp.month).padStart(2, '0')} à ${timeStr}`;
+        if (offset === 0) {
+          text = `Aujourd'hui à ${timeStr}`;
+        } else if (offset <= 6) {
+          text = `${dayLabel} à ${timeStr}`;
+        } else {
+          const fp = getZonedDateParts(foundDate, timeZone);
+          text = `${dayLabel} ${String(fp.day).padStart(2, '0')}/${String(fp.month).padStart(2, '0')} à ${timeStr}`;
+        }
       }
 
       return { date: foundDate, text };
     }
   }
 
-  return { date: now, text: 'Bientôt' };
+  return { date: now, text: lang === 'en' ? 'Soon' : 'Bientôt' };
 }
 
 
@@ -585,8 +614,11 @@ export function calculateAvailability(
   schedule: ScheduleConfig,
   events: CalendarEvent[],
   override?: ManualOverride | null,
-  timezoneOverride?: string
+  timezoneOverride?: string,
+  lang: AppLang = 'fr'
 ): AvailabilityResult {
+  const isEn = normalizeAppLang(lang, 'fr') === 'en';
+  const resolvedLang: AppLang = isEn ? 'en' : 'fr';
   const timeZone = timezoneOverride || schedule.timezone || 'Europe/Paris';
   const zoned = getZonedDateParts(now, timeZone);
   const normalizedEvents = normalizeEventsForSchedule(events, schedule, timeZone);
@@ -611,8 +643,12 @@ export function calculateAvailability(
             state: 'busy',
             badgeColor: '#EF4444',
             dotColor: '#DC2626',
-            title: override.note || 'Occupé',
-            subtitle: override.expiresAt ? `Jusqu'à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Forcé manuellement',
+            title: override.note || (isEn ? 'Busy' : 'Occupé'),
+            subtitle: override.expiresAt
+              ? `${isEn ? 'Until' : "Jusqu'à"} ${formatTimeShort(new Date(override.expiresAt), timeZone, resolvedLang)}`
+              : isEn
+              ? 'Manually set'
+              : 'Forcé manuellement',
             isWorkTime: true,
             todayAppointmentsCount,
             todayAllDayAppointmentsCount,
@@ -623,8 +659,12 @@ export function calculateAvailability(
             state: 'available',
             badgeColor: '#10B981',
             dotColor: '#059669',
-            title: override.note || 'Disponible',
-            subtitle: override.expiresAt ? `Jusqu'à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Mode disponible forcé',
+            title: override.note || (isEn ? 'Available' : 'Disponible'),
+            subtitle: override.expiresAt
+              ? `${isEn ? 'Until' : "Jusqu'à"} ${formatTimeShort(new Date(override.expiresAt), timeZone, resolvedLang)}`
+              : isEn
+              ? 'Available override'
+              : 'Mode disponible forcé',
             isWorkTime: true,
             todayAppointmentsCount,
             todayAllDayAppointmentsCount,
@@ -635,8 +675,12 @@ export function calculateAvailability(
             state: 'away',
             badgeColor: '#F59E0B',
             dotColor: '#D97706',
-            title: override.note || 'En pause',
-            subtitle: override.expiresAt ? `Reprise à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Pause temporaire',
+            title: override.note || (isEn ? 'On break' : 'En pause'),
+            subtitle: override.expiresAt
+              ? `${isEn ? 'Back at' : 'Reprise à'} ${formatTimeShort(new Date(override.expiresAt), timeZone, resolvedLang)}`
+              : isEn
+              ? 'Temporary break'
+              : 'Pause temporaire',
             isWorkTime: true,
             todayAppointmentsCount,
             todayAllDayAppointmentsCount,
@@ -647,8 +691,12 @@ export function calculateAvailability(
             state: 'busy',
             badgeColor: '#8B5CF6',
             dotColor: '#7C3AED',
-            title: override.note || 'Ne pas déranger',
-            subtitle: override.expiresAt ? `Jusqu'à ${formatTimeShort(new Date(override.expiresAt), timeZone)}` : 'Mode focus',
+            title: override.note || (isEn ? 'Do not disturb' : 'Ne pas déranger'),
+            subtitle: override.expiresAt
+              ? `${isEn ? 'Until' : "Jusqu'à"} ${formatTimeShort(new Date(override.expiresAt), timeZone, resolvedLang)}`
+              : isEn
+              ? 'Focus mode'
+              : 'Mode focus',
             isWorkTime: true,
             todayAppointmentsCount,
             todayAllDayAppointmentsCount,
@@ -702,9 +750,10 @@ export function calculateAvailability(
       compactMultiLabel && compactMultiLabel.length > 24
         ? `${compactMultiLabel.slice(0, 23).trimEnd()}…`
         : compactMultiLabel;
+    const busyBaseTitle = isEn ? 'In a meeting / Busy' : 'En réunion / Occupé';
     const busyTitle = displayLabelForTitle
-      ? `En réunion / Occupé (${displayLabelForTitle})`
-      : 'En réunion / Occupé';
+      ? `${busyBaseTitle} (${displayLabelForTitle})`
+      : busyBaseTitle;
 
     // Find next free time (check if another event is chained directly)
     let freeTime = currentEvent.endDate;
@@ -717,14 +766,14 @@ export function calculateAvailability(
     }
 
     if (currentEvent.isAllDay) {
-      const nextStart = getNextWorkStart(freeTime, schedule, timeZone, [], sortedEvents);
+      const nextStart = getNextWorkStart(freeTime, schedule, timeZone, [], sortedEvents, resolvedLang);
       return {
         status: 'BUSY',
         state: 'busy',
         badgeColor: '#EF4444',
         dotColor: '#DC2626',
         title: busyTitle,
-        subtitle: `Reprise ${nextStart.text}`,
+        subtitle: `${isEn ? 'Back' : 'Reprise'} ${nextStart.text}`,
         isWorkTime: true,
         nextFreeTime: nextStart.text,
         nextChangeDate: nextStart.date,
@@ -734,15 +783,16 @@ export function calculateAvailability(
       };
     }
 
+    const freeTimeStr = formatTimeShort(freeTime, timeZone, resolvedLang);
     return {
       status: 'BUSY',
       state: 'busy',
       badgeColor: '#EF4444',
       dotColor: '#DC2626',
       title: busyTitle,
-      subtitle: `Libre à ${formatTimeShort(freeTime, timeZone)}`,
+      subtitle: `${isEn ? 'Free at' : 'Libre à'} ${freeTimeStr}`,
       isWorkTime: true,
-      nextFreeTime: formatTimeShort(freeTime, timeZone),
+      nextFreeTime: freeTimeStr,
       nextChangeDate: freeTime,
       todayAppointmentsCount,
       todayAllDayAppointmentsCount,
@@ -757,15 +807,22 @@ export function calculateAvailability(
   // 1b. Check configured closures / public holidays (events above still take priority if scheduled)
   const activeClosure = getClosureForDate(todayDateStr, schedule);
   if (activeClosure) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents);
-    const defaultClosureTitle = activeClosure.type === 'holiday' ? 'Jour férié' : 'En congés';
+    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents, resolvedLang);
+    const defaultClosureTitle =
+      activeClosure.type === 'holiday'
+        ? isEn
+          ? 'Public holiday'
+          : 'Jour férié'
+        : isEn
+        ? 'On leave'
+        : 'En congés';
     return {
       status: 'HOLIDAY',
       state: 'off',
       badgeColor: '#64748B',
       dotColor: '#475569',
       title: activeClosure.label?.trim() || defaultClosureTitle,
-      subtitle: `Reprise ${nextStart.text}`,
+      subtitle: `${isEn ? 'Back' : 'Reprise'} ${nextStart.text}`,
       isWorkTime: false,
       nextFreeTime: nextStart.text,
       nextChangeDate: nextStart.date,
@@ -778,14 +835,14 @@ export function calculateAvailability(
 
   // 2. Check if today is a working day (e.g. weekend or day off)
   if (!daySchedule || !daySchedule.enabled) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents);
+    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents, resolvedLang);
     return {
       status: 'OFF_HOURS',
       state: 'off',
       badgeColor: '#64748B',
       dotColor: '#475569',
-      title: 'Hors horaires de travail',
-      subtitle: `Reprise ${nextStart.text}`,
+      title: isEn ? 'Outside working hours' : 'Hors horaires de travail',
+      subtitle: `${isEn ? 'Back' : 'Reprise'} ${nextStart.text}`,
       isWorkTime: false,
       nextFreeTime: nextStart.text,
       nextChangeDate: nextStart.date,
@@ -799,14 +856,14 @@ export function calculateAvailability(
 
   // 3. Check if before or after work hours
   if (currentMinutes < startMin || currentMinutes >= endMin) {
-    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents);
+    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents, resolvedLang);
     return {
       status: 'OFF_HOURS',
       state: 'off',
       badgeColor: '#64748B',
       dotColor: '#475569',
-      title: 'Hors horaires de travail',
-      subtitle: `Reprise ${nextStart.text}`,
+      title: isEn ? 'Outside working hours' : 'Hors horaires de travail',
+      subtitle: `${isEn ? 'Back' : 'Reprise'} ${nextStart.text}`,
       isWorkTime: false,
       nextFreeTime: nextStart.text,
       nextChangeDate: nextStart.date,
@@ -822,15 +879,17 @@ export function calculateAvailability(
     const lunchEnd = parseTimeToMinutes(effectiveLunch.end);
     if (currentMinutes >= lunchStart && currentMinutes < lunchEnd) {
       const lunchEndDate = new Date(now);
+      const lunchTitle =
+        isEn && effectiveLunch.label === 'Pause déjeuner' ? 'Lunch break' : effectiveLunch.label;
       return {
         status: 'LUNCH',
         state: 'away',
         badgeColor: '#F59E0B',
         dotColor: '#D97706',
-        title: effectiveLunch.label,
-        subtitle: `Reprise à ${formatMinutesToTime(lunchEnd)}`,
+        title: lunchTitle,
+        subtitle: `${isEn ? 'Back at' : 'Reprise à'} ${formatMinutesToTime(lunchEnd, resolvedLang)}`,
         isWorkTime: false,
-        nextFreeTime: formatMinutesToTime(lunchEnd),
+        nextFreeTime: formatMinutesToTime(lunchEnd, resolvedLang),
         nextChangeDate: lunchEndDate,
         todayAppointmentsCount,
         todayAllDayAppointmentsCount,
@@ -840,14 +899,16 @@ export function calculateAvailability(
 
   // 5. Currently AVAILABLE! Find when next busy event or end of day occurs
   const nextEvent = sortedEvents.find(e => e.startDate.getTime() > nowMs);
-  let availableUntilText = `Jusqu'à ${formatMinutesToTime(endMin)}`;
+  let availableUntilText = `${isEn ? 'Until' : "Jusqu'à"} ${formatMinutesToTime(endMin, resolvedLang)}`;
   let nextChangeDate: Date | undefined;
 
   // Next change could be lunch break if before lunch
   if (effectiveLunch.enabled) {
     const lunchStart = parseTimeToMinutes(effectiveLunch.start);
     if (currentMinutes < lunchStart) {
-      availableUntilText = `Jusqu'à ${formatMinutesToTime(lunchStart)} (pause)`;
+      availableUntilText = isEn
+        ? `Until ${formatMinutesToTime(lunchStart, resolvedLang)} (break)`
+        : `Jusqu'à ${formatMinutesToTime(lunchStart, resolvedLang)} (pause)`;
       const lunchDate = new Date(now);
       nextChangeDate = lunchDate;
     }
@@ -857,7 +918,7 @@ export function calculateAvailability(
   if (nextEvent) {
     const nextEventZoned = getZonedDateParts(nextEvent.startDate, timeZone);
     const eventMinutes = nextEventZoned.hour * 60 + nextEventZoned.minute;
-    const eventTimeStr = formatTimeShort(nextEvent.startDate, timeZone);
+    const eventTimeStr = formatTimeShort(nextEvent.startDate, timeZone, resolvedLang);
 
     // Is it today in the user's timezone?
     const isToday =
@@ -868,7 +929,7 @@ export function calculateAvailability(
       const lunchStart = effectiveLunch.enabled ? parseTimeToMinutes(effectiveLunch.start) : 9999;
       const lunchEnd = effectiveLunch.enabled ? parseTimeToMinutes(effectiveLunch.end) : -1;
       if (eventMinutes < endMin && (eventMinutes < lunchStart || currentMinutes >= lunchEnd)) {
-        availableUntilText = `Jusqu'à ${eventTimeStr}`;
+        availableUntilText = `${isEn ? 'Until' : "Jusqu'à"} ${eventTimeStr}`;
         nextChangeDate = nextEvent.startDate;
       }
     }
@@ -879,10 +940,10 @@ export function calculateAvailability(
     state: 'available',
     badgeColor: '#10B981',
     dotColor: '#059669',
-    title: 'Disponible',
+    title: isEn ? 'Available' : 'Disponible',
     subtitle: availableUntilText,
     isWorkTime: true,
-    nextFreeTime: 'Maintenant',
+    nextFreeTime: isEn ? 'Now' : 'Maintenant',
     nextChangeDate,
     todayAppointmentsCount,
     todayAllDayAppointmentsCount,

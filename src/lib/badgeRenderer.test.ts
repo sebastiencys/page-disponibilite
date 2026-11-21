@@ -320,9 +320,11 @@ test('truncateBadgeText prevents text overflow inside fixed-width pill, card, an
   };
 
   const pillSvg = renderBadgeSvg(longAvail, { style: 'pill', theme: 'light' });
-  assert.ok(!pillSvg.includes(longAvail.title));
-  assert.ok(!pillSvg.includes(longAvail.subtitle));
-  assert.ok(pillSvg.includes('…'));
+  const pillSvgWithoutTitle = pillSvg.replace(/<title>[\s\S]*?<\/title>/, '');
+  assert.ok(!pillSvgWithoutTitle.includes(longAvail.title));
+  assert.ok(!pillSvgWithoutTitle.includes(longAvail.subtitle));
+  assert.ok(pillSvgWithoutTitle.includes('…'));
+  assert.ok(pillSvg.includes(`<title>${longAvail.title}`));
 
   const cardSvg = renderBadgeSvg(longAvail, {
     style: 'card',
@@ -368,5 +370,71 @@ test('renderBadgeSvg and renderBadgePng support transparent theme and fallback i
   assert.ok(Buffer.isBuffer(transparentPng));
   assert.ok(transparentPng.length > 100);
 });
+
+test('supports transparent-dark theme, accessible <title> tags across all styles, and lang="en"', () => {
+  assert.equal(normalizeBadgeTheme('transparent-dark'), 'transparent-dark');
+  assert.equal(normalizeBadgeTheme('TRANSPARENT-DARK'), 'transparent-dark');
+
+  const now = new Date('2026-11-09T10:15:00+01:00');
+  const availEn = calculateAvailability(
+    now,
+    TEST_SCHEDULE,
+    [
+      {
+        id: 'rdv-en-1',
+        title: 'Secret EN Meeting',
+        start: '2026-11-09T14:00:00+01:00',
+        end: '2026-11-09T15:00:00+01:00',
+        isBusy: true,
+      },
+    ],
+    undefined,
+    'Europe/Paris',
+    'en'
+  );
+
+  for (const style of ['pill', 'card', 'signature', 'dot'] as const) {
+    const svg = renderBadgeSvg(availEn, {
+      style,
+      theme: 'transparent-dark',
+      name: 'Alice Martin',
+      role: 'Engineer',
+      company: 'Acme',
+      lang: 'en',
+    });
+    assert.ok(svg.includes('<title>'), `Style ${style} SVG should include accessible <title>`);
+    assert.ok(svg.includes('Available'), `Style ${style} SVG should contain English title`);
+    if (style !== 'dot') {
+      assert.ok(svg.includes('fill="none"'), `Style ${style} transparent-dark should have fill="none"`);
+      assert.ok(svg.includes('#cbd5e1'), `Style ${style} transparent-dark should use light secondary ink #cbd5e1`);
+      assert.ok(svg.includes('#a5b4fc'), `Style ${style} transparent-dark should use soft indigo count ink #a5b4fc`);
+      if (style === 'card' || style === 'signature') {
+        assert.ok(svg.includes('#f8fafc'), `Style ${style} transparent-dark should use light primary ink #f8fafc`);
+      }
+      assert.ok(svg.includes('1 appointment scheduled today'));
+    }
+
+    const png = renderBadgePng(availEn, {
+      style,
+      theme: 'transparent-dark',
+      name: 'Alice Martin',
+      lang: 'en',
+    });
+    assert.ok(Buffer.isBuffer(png) && png.length > 100, `Style ${style} PNG must rasterize with <title>`);
+  }
+
+  const jsonEn = buildBadgeTextPayload(availEn, {
+    name: 'Alice Martin',
+    timezone: 'Europe/Paris',
+    now,
+    lang: 'en',
+  });
+  assert.equal(jsonEn.lang, 'en');
+  assert.equal(jsonEn.localTime, '10:15');
+  assert.equal(jsonEn.title, 'Available');
+  assert.equal(jsonEn.appointmentsLabel, '1 appointment scheduled today');
+  assert.equal(jsonEn.lines.length, 3);
+});
+
 
 

@@ -27,7 +27,7 @@ import {
   getEffectiveLunchBreak,
   getClosureForDate,
   getUpcomingClosures,
-  formatTimeShort,
+  type AppLang,
   type ScheduleConfig,
   type UserProfile,
   type AvailabilityResult,
@@ -82,6 +82,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const [dateStr, setDateStr] = useState<string>(initialDateStr);
   const [timeStr, setTimeStr] = useState<string>(initialTimeStr);
   const [theme, setTheme] = useState<BadgeTheme>('light');
+  const [lang, setLang] = useState<AppLang>('fr');
   const [copiedStyle, setCopiedStyle] = useState<string | null>(null);
 
   // Minutes from 00:00 for the 24h interactive slider
@@ -116,28 +117,31 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   }, [upcomingSlots]);
 
   const localSimulatedAvailability = useMemo<AvailabilityResult>(() => {
-    return calculateAvailability(simulatedDate, schedule, anonymizedEvents, { type: 'auto' }, timezone);
-  }, [simulatedDate, schedule, anonymizedEvents, timezone]);
+    return calculateAvailability(simulatedDate, schedule, anonymizedEvents, { type: 'auto' }, timezone, lang);
+  }, [simulatedDate, schedule, anonymizedEvents, timezone, lang]);
 
   const [serverSimulation, setServerSimulation] = useState<{
     iso: string;
+    lang: AppLang;
     availability: AvailabilityResult;
     calendars?: CalendarSummaryItem[];
   } | null>(null);
 
-  // Query server /api/status?time=... so ALL calendar events (recurring, past/future, all-day) are evaluated truthfully
+  // Query server /api/status?time=...&lang=... so ALL calendar events are evaluated truthfully
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/status?time=${encodeURIComponent(simulatedIso)}`, {
-          signal: controller.signal,
-        });
+        const res = await fetch(
+          `/api/status?time=${encodeURIComponent(simulatedIso)}&lang=${lang}`,
+          { signal: controller.signal }
+        );
         if (res.ok) {
           const data = await res.json();
           if (data.availability) {
             setServerSimulation({
               iso: simulatedIso,
+              lang,
               availability: data.availability,
               calendars: Array.isArray(data.calendars) ? data.calendars : undefined,
             });
@@ -152,14 +156,14 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [simulatedIso]);
+  }, [simulatedIso, lang]);
 
   const simulatedAvailability = useMemo<AvailabilityResult>(() => {
-    if (serverSimulation && serverSimulation.iso === simulatedIso) {
+    if (serverSimulation && serverSimulation.iso === simulatedIso && serverSimulation.lang === lang) {
       return serverSimulation.availability;
     }
     return localSimulatedAvailability;
-  }, [serverSimulation, simulatedIso, localSimulatedAvailability]);
+  }, [serverSimulation, simulatedIso, lang, localSimulatedAvailability]);
 
   const simulatedCalendars = useMemo<CalendarSummaryItem[]>(() => {
     if (serverSimulation && serverSimulation.iso === simulatedIso && serverSimulation.calendars) {
@@ -266,6 +270,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const badges = useMemo(() => {
     const opts = {
       theme,
+      lang,
       name: profile.name || DEFAULT_PROFILE.name,
       role: profile.role || DEFAULT_PROFILE.role,
       company: profile.company || DEFAULT_PROFILE.company,
@@ -313,7 +318,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
         svg: dotSvg,
       },
     ];
-  }, [simulatedAvailability, theme, profile]);
+  }, [simulatedAvailability, theme, lang, profile]);
 
   const handleCopySvg = async (styleId: string, svg: string) => {
     await copyTextToClipboard(svg);
@@ -323,7 +328,8 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
 
   const buildCommonParams = () => {
     const iso = simulatedDate.toISOString();
-    return `time=${encodeURIComponent(iso)}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}`;
+    const langParam = lang === 'en' ? '&lang=en' : '';
+    return `time=${encodeURIComponent(iso)}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}${langParam}`;
   };
 
   const getSimulatedPngUrl = (style: BadgeStyle) => {
@@ -385,40 +391,81 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             </div>
           </div>
 
-          {/* Theme Selector */}
-          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-            <button
-              onClick={() => setTheme('light')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                theme === 'light'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Sun className="w-3.5 h-3.5 text-amber-500" />
-              <span>Clair</span>
-            </button>
-            <button
-              onClick={() => setTheme('dark')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                theme === 'dark'
-                  ? 'bg-slate-900 dark:bg-slate-950 text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <Moon className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Sombre</span>
-            </button>
-            <button
-              onClick={() => setTheme('transparent')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                theme === 'transparent'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-200 shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              <span>Transparent</span>
-            </button>
+          {/* Theme & Language Selectors */}
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setLang('fr')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  lang === 'fr'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                FR
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('en')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  lang === 'en'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                EN
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                <span>Clair</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-slate-900 dark:bg-slate-950 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Sombre</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('transparent')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  theme === 'transparent'
+                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-200 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>Transparent</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('transparent-dark')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  theme === 'transparent-dark'
+                    ? 'bg-slate-900 text-indigo-200 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>Transp. nuit</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -704,6 +751,8 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
                   className={`p-6 rounded-xl border flex items-center justify-center min-h-[140px] transition-colors ${
                     theme === 'dark'
                       ? 'bg-slate-950 border-slate-800'
+                      : theme === 'transparent-dark'
+                      ? 'bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px] bg-slate-900 border-slate-700'
                       : theme === 'transparent'
                       ? 'bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:12px_12px] bg-slate-100/70 dark:bg-slate-200 border-slate-300 dark:border-slate-700'
                       : 'bg-slate-50/70 dark:bg-slate-100 border-slate-200/80 dark:border-slate-700'

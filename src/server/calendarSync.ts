@@ -51,6 +51,33 @@ const inFlightSyncs = new Map<
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache to avoid rate-limiting
 const DEFAULT_PAST_MS = 7 * 86400000;
 const DEFAULT_FUTURE_MS = 90 * 86400000;
+export const MAX_ICS_BYTES = 5 * 1024 * 1024; // 5 Mo max per .ics feed
+
+export class ExternalCalendarUrlError extends Error {
+  statusCode = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExternalCalendarUrlError';
+  }
+}
+
+export async function readLimitedIcsText(
+  res: globalThis.Response,
+  maxBytes = MAX_ICS_BYTES
+): Promise<string> {
+  const contentLength = res.headers.get('content-length');
+  if (contentLength) {
+    const declaredBytes = Number(contentLength);
+    if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+      throw new Error(`Flux iCal trop volumineux (max ${Math.round(maxBytes / (1024 * 1024))} Mo).`);
+    }
+  }
+  const icsText = await res.text();
+  if (Buffer.byteLength(icsText, 'utf8') > maxBytes) {
+    throw new Error(`Flux iCal trop volumineux (max ${Math.round(maxBytes / (1024 * 1024))} Mo).`);
+  }
+  return icsText;
+}
 
 export function clearCalendarSyncCacheForTests(): void {
   memoryCacheMap.clear();
@@ -148,10 +175,10 @@ export function validateExternalCalendarUrl(rawUrl: string): string {
   try {
     parsed = new URL(normalized);
   } catch {
-    throw new Error('URL de calendrier invalide.');
+    throw new ExternalCalendarUrlError('URL de calendrier invalide.');
   }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new Error('Seules les URL http://, https:// ou webcal:// sont autorisées.');
+    throw new ExternalCalendarUrlError('Seules les URL http://, https:// ou webcal:// sont autorisées.');
   }
   const host = parsed.hostname.toLowerCase();
   if (
@@ -167,7 +194,7 @@ export function validateExternalCalendarUrl(rawUrl: string): string {
     host.endsWith('.local') ||
     host.endsWith('.internal')
   ) {
-    throw new Error('Adresse locale ou privée non autorisée.');
+    throw new ExternalCalendarUrlError('Adresse locale ou privée non autorisée.');
   }
   return parsed.toString();
 }
@@ -263,7 +290,7 @@ async function syncSingleSource(
           throw new Error(`Erreur HTTP ${res.status}: ${res.statusText}`);
         }
 
-        const icsText = await res.text();
+        const icsText = await readLimitedIcsText(res);
         const nowDate = new Date(now);
         const parsed = parseIcsEvents(icsText, timezone, { now: nowDate });
 

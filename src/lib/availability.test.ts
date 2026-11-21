@@ -778,6 +778,59 @@ test('getUpcomingClosures merges contiguous days, resolves annual closures acros
   ]);
 });
 
+test('supports lang="en" for all availability states and HH:MM time formatting', () => {
+  const tz = 'Europe/Paris';
+  const availNow = parisDate('2026-11-09T10:15:00');
+  assert.equal(formatTimeShort(availNow, tz, 'fr'), '10h15');
+  assert.equal(formatTimeShort(availNow, tz, 'en'), '10:15');
+
+  const resAvail = calculateAvailability(availNow, TEST_SCHEDULE, [], undefined, tz, 'en');
+  assert.equal(resAvail.title, 'Available');
+  assert.equal(resAvail.subtitle, 'Until 12:30 (break)');
+
+  const lunchNow = parisDate('2026-11-09T13:00:00');
+  const resLunch = calculateAvailability(lunchNow, TEST_SCHEDULE, [], undefined, tz, 'en');
+  assert.equal(resLunch.title, 'Lunch break');
+  assert.equal(resLunch.subtitle, 'Back at 13:30');
+
+  const offNow = parisDate('2026-11-09T20:30:00');
+  const resOff = calculateAvailability(offNow, TEST_SCHEDULE, [], undefined, tz, 'en');
+  assert.equal(resOff.title, 'Outside working hours');
+  assert.equal(resOff.subtitle, 'Back Tuesday at 09:00');
+
+  const busyNow = parisDate('2026-11-09T14:30:00');
+  const resBusy = calculateAvailability(
+    busyNow,
+    TEST_SCHEDULE,
+    [
+      {
+        id: 'en-busy',
+        title: 'Private Sync',
+        start: parisDate('2026-11-09T14:00:00').toISOString(),
+        end: parisDate('2026-11-09T15:00:00').toISOString(),
+        isBusy: true,
+        calendarLabel: 'Pro',
+      },
+    ],
+    undefined,
+    tz,
+    'en'
+  );
+  assert.equal(resBusy.title, 'In a meeting / Busy (Pro)');
+  assert.equal(resBusy.subtitle, 'Free at 15:00');
+
+  const closureSchedule: ScheduleConfig = {
+    ...TEST_SCHEDULE,
+    closures: [{ startDate: '2026-11-11', endDate: '2026-11-11', label: 'Veterans Day', type: 'holiday' }],
+  };
+  const holidayNow = parisDate('2026-11-11T10:00:00');
+  const resHoliday = calculateAvailability(holidayNow, closureSchedule, [], undefined, tz, 'en');
+  assert.equal(resHoliday.status, 'HOLIDAY');
+  assert.equal(resHoliday.title, 'Veterans Day');
+  assert.equal(resHoliday.subtitle, 'Back Thursday at 09:00');
+});
+
+
 
 
 

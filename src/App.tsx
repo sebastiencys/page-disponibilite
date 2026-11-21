@@ -290,6 +290,7 @@ export default function App() {
 
   const isStudioRoute = currentTab !== 'public';
   const studioLocked = authLoading || (passwordRequired && !isStudioAuthenticated);
+  const failedCalendarsCount = envCalendars.filter(c => !c.ok).length;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors">
@@ -306,6 +307,7 @@ export default function App() {
         onLockStudio={handleLockStudio}
         isDark={isDark}
         onToggleTheme={() => setIsDark(d => !d)}
+        calendarErrorCount={failedCalendarsCount}
       />
 
       {/* Main Content Area */}

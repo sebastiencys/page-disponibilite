@@ -9,6 +9,9 @@ import {
   calculateAvailability,
   getAnonymizedUpcomingSlots,
   getCalendarSummaries,
+  formatTimeShort,
+  getZonedDateParts,
+  normalizeAppLang,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type ScheduleConfig,
@@ -30,8 +33,11 @@ import {
   hasEnvCalendar,
   getSyncedCalendarEvents,
   validateExternalCalendarUrl,
+  ExternalCalendarUrlError,
+  readLimitedIcsText,
   type SyncedCalendarInfo,
 } from './calendarSync.ts';
+import { computeSemanticWeakEtag, matchesIfNoneMatch } from './etag.ts';
 import {
   isStudioPasswordRequired,
   verifyStudioPassword,
@@ -143,7 +149,8 @@ export async function handleApiRequest(
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
+  res.setHeader('Access-Control-Expose-Headers', 'ETag');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -315,6 +322,7 @@ export async function handleApiRequest(
 
   const badgeStyle = normalizeBadgeStyle(query.style, 'pill');
   const badgeTheme = normalizeBadgeTheme(query.theme, 'light');
+  const badgeLang = normalizeAppLang(query.lang, 'fr');
   const badgeName = sanitizeQueryField(query.name, globalStore.name);
   const badgeRole = sanitizeQueryField(query.role, globalStore.role);
   const badgeCompany = sanitizeQueryField(query.company, globalStore.company);
@@ -343,7 +351,8 @@ export async function handleApiRequest(
       globalStore.schedule,
       currentEvents,
       globalStore.override,
-      serverTimezone
+      serverTimezone,
+      badgeLang
     );
 
     const svg = renderBadgeSvg(avail, {
@@ -352,13 +361,14 @@ export async function handleApiRequest(
       name: badgeName,
       role: badgeRole,
       company: badgeCompany,
+      lang: badgeLang,
     });
 
     serveSvg(res, svg);
     return true;
   }
 
-  // 2. Dynamic JSON Badge (text version of the badge info)
+  // 2. Dynamic JSON Badge (text version of the badge info with semantic ETag)
   if (
     pathname === '/api/badge.json' ||
     pathname === '/badge.json' ||
@@ -382,7 +392,8 @@ export async function handleApiRequest(
       globalStore.schedule,
       currentEvents,
       globalStore.override,
-      serverTimezone
+      serverTimezone,
+      badgeLang
     );
     const calendarSummaries = getCalendarSummaries(
       now,
@@ -398,10 +409,12 @@ export async function handleApiRequest(
       company: badgeCompany,
       timezone: serverTimezone,
       now,
+      lang: badgeLang,
       calendars: calendarSummaries,
     });
 
-    serveJson(res, payload);
+    const etag = computeSemanticWeakEtag({ ...payload, updatedAt: undefined });
+    serveJsonWithEtag(req, res, payload, etag);
     return true;
   }
 
@@ -428,7 +441,8 @@ export async function handleApiRequest(
       globalStore.schedule,
       currentEvents,
       globalStore.override,
-      serverTimezone
+      serverTimezone,
+      badgeLang
     );
 
     await ensureFontsLoaded();
@@ -438,18 +452,19 @@ export async function handleApiRequest(
       name: badgeName,
       role: badgeRole,
       company: badgeCompany,
+      lang: badgeLang,
     });
 
     servePng(res, png);
     return true;
   }
 
-  // 4. Current Live Status (JSON) — also supports ?time=<ISO> for simulation and ?refresh=1 (Studio-authenticated)
+  // 4. Current Live Status (JSON) — also supports ?time=<ISO>, ?lang=fr|en, ?refresh=1, and semantic ETag
   if (pathname === '/api/status') {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     if (isHead) {
+      res.statusCode = 200;
       res.end();
       return true;
     }
@@ -470,7 +485,8 @@ export async function handleApiRequest(
       globalStore.schedule,
       currentEvents,
       globalStore.override,
-      serverTimezone
+      serverTimezone,
+      badgeLang
     );
     const upcomingSlots = getAnonymizedUpcomingSlots(
       currentEvents,
@@ -487,24 +503,39 @@ export async function handleApiRequest(
       syncedCalendars.map(c => ({ id: c.id, label: c.label }))
     );
 
-    res.end(
-      JSON.stringify({
-        now: now.toISOString(),
-        timezone: serverTimezone,
-        availability: avail,
-        hasEnvCalendar: hasEnvCalendar(),
-        calendars: calendarSummaries,
-        envCalendars: syncedCalendars,
-        upcomingSlots,
-        profile: {
-          name: globalStore.name,
-          role: globalStore.role,
-          company: globalStore.company,
-          email: globalStore.email,
-          bookingUrl: globalStore.bookingUrl,
-        },
-      })
-    );
+    const statusPayload = {
+      now: now.toISOString(),
+      timezone: serverTimezone,
+      lang: badgeLang,
+      availability: avail,
+      hasEnvCalendar: hasEnvCalendar(),
+      calendars: calendarSummaries,
+      envCalendars: syncedCalendars,
+      upcomingSlots,
+      profile: {
+        name: globalStore.name,
+        role: globalStore.role,
+        company: globalStore.company,
+        email: globalStore.email,
+        bookingUrl: globalStore.bookingUrl,
+      },
+    };
+    const zonedNow = getZonedDateParts(now, serverTimezone);
+    const etag = computeSemanticWeakEtag({
+      ...statusPayload,
+      now: undefined,
+      localMinute: formatTimeShort(now, serverTimezone, badgeLang),
+      localDate: `${zonedNow.year}-${zonedNow.month}-${zonedNow.day}`,
+    });
+    res.setHeader('ETag', etag);
+    if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
+      res.statusCode = 304;
+      res.end();
+      return true;
+    }
+
+    res.statusCode = 200;
+    res.end(JSON.stringify(statusPayload));
     return true;
   }
 
@@ -536,7 +567,7 @@ export async function handleApiRequest(
     }
   }
 
-  // 5. Fetch & parse remote iCal link
+  // 5. Fetch & parse remote iCal link (data-minimized response: count only, no private event titles)
   if (pathname === '/api/fetch-ics' && req.method === 'POST') {
     if (!isRequestStudioAuthenticated(req.headers)) {
       res.statusCode = 401;
@@ -546,19 +577,39 @@ export async function handleApiRequest(
     }
     try {
       const bodyStr = await readBody(req);
-      const { url } = JSON.parse(bodyStr);
+      let url: unknown;
+      try {
+        ({ url } = JSON.parse(bodyStr || '{}'));
+      } catch {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'JSON invalide' }));
+        return true;
+      }
       if (!url || typeof url !== 'string') {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: 'URL required' }));
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'URL requise' }));
         return true;
       }
 
       const fetchUrl = validateExternalCalendarUrl(url);
-      const response = await fetch(fetchUrl);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let response: globalThis.Response;
+      try {
+        response = await fetch(fetchUrl, {
+          signal: controller.signal,
+          cache: 'no-store',
+          headers: { 'User-Agent': 'DispoLive-Calendar-Sync/1.0' },
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!response.ok) {
         throw new Error(`Failed to fetch ICS: ${response.statusText}`);
       }
-      const icsText = await response.text();
+      const icsText = await readLimitedIcsText(response);
       const events = parseIcsEvents(icsText, serverTimezone);
 
       globalStore.events = events;
@@ -566,10 +617,15 @@ export async function handleApiRequest(
 
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: true, count: events.length, events }));
+      res.end(JSON.stringify({ success: true, count: events.length }));
       return true;
     } catch (err: any) {
-      res.statusCode = err instanceof PayloadTooLargeError ? 413 : 500;
+      res.statusCode =
+        err instanceof PayloadTooLargeError
+          ? 413
+          : err instanceof ExternalCalendarUrlError
+          ? 400
+          : 500;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ error: err.message }));
       return true;
@@ -616,4 +672,26 @@ function serveJson(res: ServerResponse, payload: unknown, headOnly = false) {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   res.end(headOnly ? undefined : JSON.stringify(payload, null, 2));
+}
+
+function serveJsonWithEtag(
+  req: IncomingMessage,
+  res: ServerResponse,
+  payload: unknown,
+  etag: string
+) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('ETag', etag);
+
+  if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
+    res.statusCode = 304;
+    res.end();
+    return;
+  }
+
+  res.statusCode = 200;
+  res.end(JSON.stringify(payload, null, 2));
 }

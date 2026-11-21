@@ -2,7 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { DEFAULT_SCHEDULE } from '../src/lib/availability.ts';
 import { parseIcsEvents } from '../src/lib/icalParser.ts';
 import { isRequestStudioAuthenticated } from '../src/server/studioAuth.ts';
-import { validateExternalCalendarUrl } from '../src/server/calendarSync.ts';
+import {
+  validateExternalCalendarUrl,
+  ExternalCalendarUrlError,
+  readLimitedIcsText,
+} from '../src/server/calendarSync.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -24,20 +28,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { url } = req.body || {};
     if (!url || typeof url !== 'string') {
-      return res.status(400).json({ error: 'URL required' });
+      return res.status(400).json({ error: 'URL requise' });
     }
 
     const fetchUrl = validateExternalCalendarUrl(url);
-    const response = await fetch(fetchUrl);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let response: globalThis.Response;
+    try {
+      response = await fetch(fetchUrl, {
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: { 'User-Agent': 'DispoLive-Calendar-Sync/1.0' },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) {
       throw new Error(`Failed to fetch ICS: ${response.statusText}`);
     }
-    const icsText = await response.text();
+    const icsText = await readLimitedIcsText(response);
     const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
     const events = parseIcsEvents(icsText, timezone);
 
-    return res.status(200).json({ success: true, count: events.length, events });
+    return res.status(200).json({ success: true, count: events.length });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    const status = err instanceof ExternalCalendarUrlError ? 400 : 500;
+    return res.status(status).json({ error: err.message });
   }
 }

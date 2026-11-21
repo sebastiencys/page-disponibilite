@@ -1,4 +1,4 @@
-import { DEFAULT_PROFILE, formatTimeShort, type AvailabilityResult } from './availability.ts';
+import { DEFAULT_PROFILE, formatTimeShort, type AppLang, type AvailabilityResult } from './availability.ts';
 import type { BadgeStyle, BadgeTheme } from './badgeRenderer.ts';
 
 export const DEFAULT_AUTO_REFRESH_MS = 10 * 60 * 1000; // 10 minutes
@@ -24,6 +24,7 @@ export interface BadgeUrlParams {
   name?: string;
   role?: string;
   company?: string;
+  lang?: AppLang;
 }
 
 /**
@@ -69,7 +70,8 @@ export function buildBadgePublicUrl(baseUrl: string, params: BadgeUrlParams): st
   const safeName = encodeURIComponent(params.name || DEFAULT_PROFILE.name);
   const safeRole = encodeURIComponent(params.role || DEFAULT_PROFILE.role);
   const safeCompany = encodeURIComponent(params.company || DEFAULT_PROFILE.company);
-  return `${cleanBase}/api/badge.${params.format}?style=${params.style}&theme=${params.theme}&name=${safeName}&role=${safeRole}&company=${safeCompany}`;
+  const langSuffix = params.lang === 'en' ? '&lang=en' : '';
+  return `${cleanBase}/api/badge.${params.format}?style=${params.style}&theme=${params.theme}&name=${safeName}&role=${safeRole}&company=${safeCompany}${langSuffix}`;
 }
 
 /**

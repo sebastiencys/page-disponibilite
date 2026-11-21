@@ -99,3 +99,21 @@ test('formatRemainingRefreshTime formats countdown cleanly', () => {
   assert.equal(formatRemainingRefreshTime(start, start + 9 * 60 * 1000 + 30_000, 600_000), '< 1 min');
   assert.equal(formatRemainingRefreshTime(start, start, 0), 'Manuel');
 });
+
+test('buildBadgePublicUrl includes lang=en only when English is requested', () => {
+  const baseParams = {
+    format: 'svg' as const,
+    style: 'signature' as const,
+    theme: 'transparent-dark' as const,
+    name: 'Jean Dupont',
+    role: 'Consultant',
+    company: 'Acme',
+  };
+  const frUrl = buildBadgePublicUrl('https://dispolive.example.com', { ...baseParams, lang: 'fr' });
+  assert.ok(!frUrl.includes('lang='));
+
+  const enUrl = buildBadgePublicUrl('https://dispolive.example.com', { ...baseParams, lang: 'en' });
+  assert.ok(enUrl.endsWith('&lang=en'));
+  assert.ok(enUrl.includes('theme=transparent-dark'));
+});
+

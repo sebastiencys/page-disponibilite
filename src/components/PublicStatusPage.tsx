@@ -14,6 +14,7 @@ import {
   Check,
   FileCode,
   Link2,
+  UserPlus,
 } from 'lucide-react';
 import {
   getZonedDateParts,
@@ -28,6 +29,7 @@ import {
 } from '../lib/availability.ts';
 import { formatTodayAppointmentsLabel } from '../lib/badgeSvg.ts';
 import { copyTextToClipboard } from '../lib/clipboard.ts';
+import { buildPublicVCard } from '../lib/vcard.ts';
 
 interface PublicStatusPageProps {
   profile: {
@@ -93,6 +95,27 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
     await copyTextToClipboard(publicUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleDownloadVCard = () => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const publicUrl = `${window.location.origin}/?view=public`;
+    const vcardContent = buildPublicVCard(profile, publicUrl);
+    const blob = new Blob([vcardContent], { type: 'text/vcard;charset=utf-8' });
+    const objectUrl = URL.createObjectURL(blob);
+    const rawSlug = (profile.name || 'contact')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = `${rawSlug || 'contact'}.vcf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   };
 
   const getStatusIcon = () => {
@@ -330,6 +353,16 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                 <span>Copier le lien</span>
               </>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadVCard}
+            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+            title="Télécharger la fiche contact (.vcf) pour votre carnet d'adresses"
+          >
+            <UserPlus className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+            <span>Ajouter aux contacts</span>
           </button>
         </div>
       </div>

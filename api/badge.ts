@@ -2,9 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   calculateAvailability,
   getCalendarSummaries,
+  normalizeAppLang,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
-  type ScheduleConfig,
   type CalendarEvent,
   type ManualOverride,
 } from '../src/lib/availability.ts';
@@ -17,6 +17,7 @@ import {
   ensureFontsLoaded,
 } from '../src/lib/badgeRenderer.ts';
 import { getSyncedCalendarEvents } from '../src/server/calendarSync.ts';
+import { computeSemanticWeakEtag, matchesIfNoneMatch } from '../src/server/etag.ts';
 
 const defaultEvents: CalendarEvent[] = [];
 
@@ -24,6 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
+  res.setHeader('Access-Control-Expose-Headers', 'ETag');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -32,6 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const query = req.query || {};
   const style = normalizeBadgeStyle(query.style, 'pill');
   const theme = normalizeBadgeTheme(query.theme, 'light');
+  const lang = normalizeAppLang(query.lang, 'fr');
   const sanitizeField = (val: unknown, fallback: string) => {
     if (typeof val !== 'string') return fallback;
     const trimmed = val.trim();
@@ -69,11 +73,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       now = parsedTime;
     }
   }
-  let schedule = DEFAULT_SCHEDULE;
+  const schedule = DEFAULT_SCHEDULE;
   let events = defaultEvents;
-  let override: ManualOverride = { type: 'auto' };
+  const override: ManualOverride = { type: 'auto' };
 
-  // Fetch from secure CALENDAR_ICS_URL environment variable if set
+  // Fetch from secure CALENDAR_ICS_URL* environment variables if set
   const synced = await getSyncedCalendarEvents(undefined, false, now);
   if (synced.events && synced.events.length > 0) {
     events = synced.events;
@@ -81,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Calculate live availability (automatic truthful calendar & schedule evaluation)
   const timezone = process.env.TIMEZONE || schedule.timezone || 'Europe/Paris';
-  const avail = calculateAvailability(now, schedule, events, override, timezone);
+  const avail = calculateAvailability(now, schedule, events, override, timezone, lang);
 
   if (format === 'json') {
     const calendarSummaries = getCalendarSummaries(
@@ -97,9 +101,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       company: safeCompany,
       timezone,
       now,
+      lang,
       calendars: calendarSummaries,
     });
+    const etag = computeSemanticWeakEtag({ ...payload, updatedAt: undefined });
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('ETag', etag);
+    if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
+      return res.status(304).end();
+    }
     return res.status(200).send(JSON.stringify(payload, null, 2));
   }
 
@@ -110,6 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       name: safeName,
       role: safeRole,
       company: safeCompany,
+      lang,
     });
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
     return res.status(200).send(svg);
@@ -123,9 +134,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     name: safeName,
     role: safeRole,
     company: safeCompany,
+    lang,
   });
   res.setHeader('Content-Type', 'image/png');
   res.setHeader('Content-Length', png.length);
   return res.status(200).send(png);
-
 }

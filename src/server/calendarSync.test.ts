@@ -149,3 +149,28 @@ test('getSyncedCalendarEvents coalesces concurrent cold fetches and serves subse
   }
 });
 
+test('validateExternalCalendarUrl throws ExternalCalendarUrlError (400) and readLimitedIcsText enforces 5 MB cap', async () => {
+  const { ExternalCalendarUrlError, MAX_ICS_BYTES, readLimitedIcsText } = await import('./calendarSync.ts');
+  assert.equal(MAX_ICS_BYTES, 5 * 1024 * 1024);
+
+  assert.throws(
+    () => validateExternalCalendarUrl('http://127.0.0.1/cal.ics'),
+    (err: any) => err instanceof ExternalCalendarUrlError && err.statusCode === 400
+  );
+
+  const oversizedHeaderRes = new Response('BEGIN:VCALENDAR', {
+    status: 200,
+    headers: { 'content-length': String(MAX_ICS_BYTES + 1) },
+  });
+  await assert.rejects(() => readLimitedIcsText(oversizedHeaderRes), /trop volumineux/i);
+
+  const smallOkRes = new Response('BEGIN:VCALENDAR\r\nEND:VCALENDAR', { status: 200 });
+  const text = await readLimitedIcsText(smallOkRes);
+  assert.ok(text.includes('BEGIN:VCALENDAR'));
+
+  // Test small custom byte cap for multi-byte body check without allocating >5 MB string in RAM unnecessarily
+  const bigBodyRes = new Response('é'.repeat(20), { status: 200 });
+  await assert.rejects(() => readLimitedIcsText(bigBodyRes, 10), /trop volumineux/i);
+});
+
+

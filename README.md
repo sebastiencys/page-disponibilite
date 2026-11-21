@@ -141,13 +141,13 @@ Un onglet dédié **Simulateur** (ou accessible via `?view=simulator`) permet de
 
 ## 🌐 Routes API Badges (SVG, PNG & JSON)
 
-Toutes les routes publiques de badges sont accessibles sans authentification, avec CORS activé (`Access-Control-Allow-Origin: *`) et des en-têtes anti-cache stricts (`Cache-Control: no-cache, no-store, must-revalidate, max-age=0`) pour garantir une donnée fraîche à chaque appel.
+Toutes les routes publiques de badges sont accessibles sans authentification, avec CORS activé (`Access-Control-Allow-Origin: *`) et des en-têtes anti-cache stricts (`Cache-Control: no-cache, no-store, must-revalidate, max-age=0`) pour garantir une donnée fraîche à chaque appel. Les endpoints JSON (`/api/badge.json` et `/api/status`) exposent en plus un **`ETag`** sémantique compatible `If-None-Match` (`304 Not Modified`).
 
 ### 1. Routes disponibles & formats de sortie
 
 | Route (et alias court) | Content-Type | Sortie produite | Usage conseillé |
 | :--- | :--- | :--- | :--- |
-| `GET /api/badge.svg` (`/badge.svg`) | `image/svg+xml; charset=utf-8` | Badge vectoriel SVG animé (halo pulsant) | Web, Notion, GitHub, Gmail web, Apple Mail |
+| `GET /api/badge.svg` (`/badge.svg`) | `image/svg+xml; charset=utf-8` | Badge vectoriel SVG animé (halo pulsant + `<title>` accessible) | Web, Notion, GitHub, Gmail web, Apple Mail |
 | `GET /api/badge.png` (`/badge.png`) | `image/png` | Image PNG anti-aliasée **1,5× (Retina)** avec police `Plus Jakarta Sans` | Signatures e-mail universelles (**Outlook Desktop** inclus) |
 | `GET /api/badge.json` (`/badge.json`) | `application/json; charset=utf-8` | Objet JSON structuré (statut, lignes de texte, compteurs, couleurs) | Scripts, widgets, Raccourcis Apple, Home Assistant, Raycast |
 
@@ -158,11 +158,12 @@ Toutes les routes publiques de badges sont accessibles sans authentification, av
 | Paramètre | Routes concernées | Valeurs possibles | Défaut | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `style` | SVG, PNG | `pill`, `card`, `signature`, `dot` | `pill` | Choisit la variante visuelle (voir dimensions ci-dessous) |
-| `theme` | SVG, PNG | `light`, `dark`, `transparent` | `light` | Palette claire (fond blanc), sombre (`#0f172a`) ou fond transparent |
-| `time` | SVG, PNG, JSON | Date ISO 8601 (ex. `2026-11-23T10:00:00%2B04:00`) | *Maintenant* | Évalue et rend le statut à une date/heure précise (simulation) |
-| `name` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge le nom affiché sur le badge / dans le JSON |
-| `role` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge le poste / spécialité |
-| `company` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge l'entreprise / établissement |
+| `theme` | SVG, PNG | `light`, `dark`, `transparent`, `transparent-dark` | `light` | Palette claire (fond blanc), sombre (`#0f172a`), transparente texte foncé (`transparent`) ou transparente texte clair (`transparent-dark` pour signatures/sites en mode sombre) |
+| `lang` | SVG, PNG, JSON, `/api/status` | `fr`, `en` | `fr` | Langue des libellés et du format horaire (`09h00` en `fr`, `09:00` en `en`) |
+| `time` | SVG, PNG, JSON, `/api/status` | Date ISO 8601 (ex. `2026-11-23T10:00:00%2B04:00`) | *Maintenant* | Évalue et rend le statut à une date/heure précise (simulation) |
+| `name` | SVG, PNG, JSON | Texte libre *(max 120 car.)* | `config/personal.json` | Surcharge le nom affiché sur le badge / dans le JSON |
+| `role` | SVG, PNG, JSON | Texte libre *(max 120 car.)* | `config/personal.json` | Surcharge le poste / spécialité |
+| `company` | SVG, PNG, JSON | Texte libre *(max 120 car.)* | `config/personal.json` | Surcharge l'entreprise / établissement |
 | `format` | `/api/badge` | `png`, `svg`, `json` | `png` | Force le format de sortie lorsque l'extension n'est pas dans l'URL |
 | `v` | SVG, PNG | Chaîne libre (ex. `v=17321000`) | — | Cache-buster optionnel côté client / e-mail |
 
@@ -175,8 +176,8 @@ Toutes les routes publiques de badges sont accessibles sans authentification, av
 #### Exemples d'appels :
 ```text
 /api/badge.png?style=signature&theme=dark
-/api/badge.svg?style=card&theme=light&time=2026-11-23T10:00:00%2B04:00
-/api/badge.json
+/api/badge.svg?style=card&theme=transparent-dark&lang=en
+/api/badge.json?lang=en
 /api/badge.json?time=2026-11-23T10:00:00%2B04:00
 ```
 

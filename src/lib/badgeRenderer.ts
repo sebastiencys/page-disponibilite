@@ -72,6 +72,7 @@ import {
   type BadgeTextOptions,
   type BadgeTextPayload,
 } from './badgeSvg.ts';
+import { type AppLang, normalizeAppLang } from './availability.ts';
 
 // Re-export pure SVG/text generation and types from badgeSvg
 export {
@@ -79,7 +80,9 @@ export {
   buildBadgeTextPayload,
   normalizeBadgeStyle,
   normalizeBadgeTheme,
+  normalizeAppLang,
   escapeHtml,
+  type AppLang,
   type BadgeStyle,
   type BadgeTheme,
   type BadgeOptions,

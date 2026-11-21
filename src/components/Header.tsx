@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock, Sliders, Lock, Sun, Moon } from 'lucide-react';
+import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock, Sliders, Lock, Sun, Moon, AlertTriangle } from 'lucide-react';
 import { type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
 
 interface HeaderProps {
@@ -14,6 +14,7 @@ interface HeaderProps {
   onLockStudio?: () => void;
   isDark?: boolean;
   onToggleTheme?: () => void;
+  calendarErrorCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,6 +29,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLockStudio,
   isDark = false,
   onToggleTheme,
+  calendarErrorCount = 0,
 }) => {
   const isPublicOrLocked = currentTab === 'public' || studioLocked;
   const tzCity = timezone.split('/')[1]?.replace('_', ' ') || timezone;
@@ -175,6 +177,18 @@ export const Header: React.FC<HeaderProps> = ({
                 {availability.title}
               </span>
             </div>
+
+            {calendarErrorCount > 0 && (
+              <button
+                type="button"
+                onClick={() => onSelectTab('schedule')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                title={`${calendarErrorCount} agenda(s) en erreur lors de la dernière synchronisation — cliquer pour diagnostiquer`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="hidden lg:inline">Synchro agenda dégradée</span>
+              </button>
+            )}
 
             {renderThemeToggle()}
 
