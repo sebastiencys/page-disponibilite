@@ -37,6 +37,10 @@ import {
   isRequestStudioAuthenticated,
   buildSessionCookieHeader,
   buildClearSessionCookieHeader,
+  extractClientIp,
+  checkAuthRateLimit,
+  recordAuthFailure,
+  clearAuthFailures,
 } from './studioAuth.ts';
 
 export interface UserState {
@@ -75,12 +79,13 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 async function resolveCurrentCalendarState(
-  targetTime?: Date
+  targetTime?: Date,
+  forceRefresh = false
 ): Promise<{ events: CalendarEvent[]; calendars: SyncedCalendarInfo[] }> {
   if (hasEnvCalendar() || globalStore.icsUrl) {
     const { events, calendars } = await getSyncedCalendarEvents(
       globalStore.icsUrl,
-      false,
+      forceRefresh,
       targetTime
     );
     if (events && events.length > 0) {
@@ -145,11 +150,39 @@ export async function handleApiRequest(
         return true;
       }
 
+      const clientIp = extractClientIp(req.headers, req.socket?.remoteAddress);
+      const rateCheck = checkAuthRateLimit(clientIp);
+      if (!rateCheck.allowed) {
+        res.setHeader('Retry-After', String(rateCheck.retryAfterSeconds));
+        res.statusCode = 429;
+        res.end(
+          JSON.stringify({
+            authenticated: false,
+            passwordRequired: true,
+            error: `Trop de tentatives. Réessayez dans ${rateCheck.retryAfterSeconds} s.`,
+          })
+        );
+        return true;
+      }
+
       try {
         const bodyStr = await readBody(req);
         const data = JSON.parse(bodyStr || '{}');
         const candidate = typeof data.password === 'string' ? data.password : '';
         if (!verifyStudioPassword(candidate)) {
+          const failure = recordAuthFailure(clientIp);
+          if (!failure.allowed) {
+            res.setHeader('Retry-After', String(failure.retryAfterSeconds));
+            res.statusCode = 429;
+            res.end(
+              JSON.stringify({
+                authenticated: false,
+                passwordRequired: true,
+                error: `Trop de tentatives. Réessayez dans ${failure.retryAfterSeconds} s.`,
+              })
+            );
+            return true;
+          }
           res.statusCode = 401;
           res.end(
             JSON.stringify({
@@ -161,6 +194,7 @@ export async function handleApiRequest(
           return true;
         }
 
+        clearAuthFailures(clientIp);
         const token = createStudioSessionToken();
         res.setHeader('Set-Cookie', buildSessionCookieHeader(token));
         res.statusCode = 200;
@@ -224,6 +258,26 @@ export async function handleApiRequest(
   }
 
   const serverTimezone = process.env.TIMEZONE || globalStore.schedule.timezone || 'Europe/Paris';
+
+  // Healthcheck / ICS warm-up endpoint (anonymized)
+  if (pathname === '/api/health') {
+    const { calendars } = await resolveCurrentCalendarState();
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.end(
+      JSON.stringify({
+        ok: true,
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        timezone: serverTimezone,
+        hasEnvCalendar: hasEnvCalendar(),
+        calendarsCount: calendars.length,
+        calendars,
+      })
+    );
+    return true;
+  }
 
   // 1. Dynamic SVG Badge
   if (pathname === '/api/badge.svg' || pathname === '/badge.svg') {
@@ -327,15 +381,19 @@ export async function handleApiRequest(
     return true;
   }
 
-  // 3. Current Live Status (JSON) — also supports ?time=<ISO> for simulation
+  // 3. Current Live Status (JSON) — also supports ?time=<ISO> for simulation and ?refresh=1 (Studio-authenticated)
   if (pathname === '/api/status') {
     let now = new Date();
     if (query.time && typeof query.time === 'string') {
       const parsed = new Date(query.time);
       if (!isNaN(parsed.getTime())) now = parsed;
     }
+    const forceRefresh =
+      (query.refresh === '1' || query.refresh === 'true') &&
+      isRequestStudioAuthenticated(req.headers);
+
     const { events: currentEvents, calendars: syncedCalendars } =
-      await resolveCurrentCalendarState(now);
+      await resolveCurrentCalendarState(now, forceRefresh);
     const avail = calculateAvailability(
       now,
       globalStore.schedule,
@@ -360,7 +418,7 @@ export async function handleApiRequest(
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.end(
       JSON.stringify({
         now: now.toISOString(),

@@ -76,6 +76,15 @@ function escapeXml(unsafe: string): string {
 }
 
 /**
+ * Truncates long badge strings cleanly with an ellipsis so fixed-width SVGs never overflow.
+ */
+export function truncateBadgeText(text: string, maxChars: number): string {
+  const clean = (text || '').trim();
+  if (maxChars <= 1 || clean.length <= maxChars) return clean;
+  return `${clean.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
+/**
  * Formats the today appointments count label for the 3rd badge line
  */
 export function formatTodayAppointmentsLabel(count: number, allDayCount: number = 0): string {
@@ -182,11 +191,14 @@ export function renderBadgeSvg(
     Math.min(todayCount, Math.floor(avail.todayAllDayAppointmentsCount ?? 0))
   );
   const hasTodayRdvs = todayCount > 0;
-  const safeTodayLabel = escapeXml(formatTodayAppointmentsLabel(todayCount, todayAllDayCount));
+  const rawTodayLabel = formatTodayAppointmentsLabel(todayCount, todayAllDayCount);
+  const safeTodayLabel = escapeXml(truncateBadgeText(rawTodayLabel, style === 'card' ? 42 : 46));
 
-  const safeTitle = escapeXml(avail.title);
-  const safeSubtitle = escapeXml(avail.subtitle);
-  const safeName = escapeXml(name);
+  const titleMax = style === 'card' ? 35 : style === 'signature' ? 38 : 38;
+  const subMax = style === 'card' ? 42 : style === 'signature' ? 45 : 44;
+  const safeTitle = escapeXml(truncateBadgeText(avail.title, titleMax));
+  const safeSubtitle = escapeXml(truncateBadgeText(avail.subtitle, subMax));
+  const safeName = escapeXml(truncateBadgeText(name, style === 'card' ? 24 : 30));
   const safeRole = escapeXml(role);
   const safeCompany = escapeXml(company);
 
@@ -357,7 +369,8 @@ export function renderBadgeSvg(
     .join('')
     .toUpperCase() || 'DL';
 
-  const roleText = safeRole ? (safeCompany ? `${safeRole} • ${safeCompany}` : safeRole) : 'Disponibilité en direct';
+  const rawRoleText = role ? (company ? `${role} • ${company}` : role) : 'Disponibilité en direct';
+  const roleText = escapeXml(truncateBadgeText(rawRoleText, 46));
   const avatarBg = isDark ? '#1e293b' : '#f1f5f9';
 
   const sigSvgH = hasTodayRdvs ? 132 : 114;

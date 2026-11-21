@@ -18,5 +18,6 @@
       "4": { "enabled": true, "start": "12:00", "end": "13:00" }
     }
   },
-  "bufferMinutes": 0
+  "bufferMinutes": 0,
+  "closures": []
 }

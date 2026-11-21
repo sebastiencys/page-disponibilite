@@ -16,6 +16,8 @@
     { "source": "/api/badge.svg", "destination": "/api/badge?format=svg" },
     { "source": "/api/badge.json", "destination": "/api/badge?format=json" },
     { "source": "/api/status", "destination": "/api/status" },
+    { "source": "/api/calendar-refresh", "destination": "/api/calendar-refresh" },
+    { "source": "/api/health", "destination": "/api/health" },
     { "source": "/api/sync", "destination": "/api/sync" },
     { "source": "/api/fetch-ics", "destination": "/api/fetch-ics" },
     { "source": "/api/studio-auth", "destination": "/api/studio-auth" },

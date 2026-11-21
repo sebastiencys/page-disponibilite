@@ -8,11 +8,12 @@ import {
   type CalendarEvent,
 } from '../src/lib/availability.ts';
 import { getSyncedCalendarEvents, hasEnvCalendar } from '../src/server/calendarSync.ts';
+import { isRequestStudioAuthenticated } from '../src/server/studioAuth.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -25,9 +26,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!isNaN(parsed.getTime())) now = parsed;
   }
   const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
+  const forceRefresh =
+    (req.query?.refresh === '1' || req.query?.refresh === 'true') &&
+    isRequestStudioAuthenticated(req.headers);
 
   let events: CalendarEvent[] = [];
-  const synced = await getSyncedCalendarEvents(undefined, false, now);
+  const synced = await getSyncedCalendarEvents(undefined, forceRefresh, now);
   if (synced.events && synced.events.length > 0) {
     events = synced.events;
   }

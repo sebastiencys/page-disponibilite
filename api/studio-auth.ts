@@ -6,6 +6,10 @@ import {
   isRequestStudioAuthenticated,
   buildSessionCookieHeader,
   buildClearSessionCookieHeader,
+  extractClientIp,
+  checkAuthRateLimit,
+  recordAuthFailure,
+  clearAuthFailures,
 } from '../src/server/studioAuth.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -35,8 +39,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ authenticated: true, passwordRequired: false, token: '' });
     }
 
+    const clientIp = extractClientIp(req.headers, req.socket?.remoteAddress);
+    const rateCheck = checkAuthRateLimit(clientIp);
+    if (!rateCheck.allowed) {
+      res.setHeader('Retry-After', String(rateCheck.retryAfterSeconds));
+      return res.status(429).json({
+        authenticated: false,
+        passwordRequired: true,
+        error: `Trop de tentatives. Réessayez dans ${rateCheck.retryAfterSeconds} s.`,
+      });
+    }
+
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
     if (!verifyStudioPassword(password)) {
+      const failure = recordAuthFailure(clientIp);
+      if (!failure.allowed) {
+        res.setHeader('Retry-After', String(failure.retryAfterSeconds));
+        return res.status(429).json({
+          authenticated: false,
+          passwordRequired: true,
+          error: `Trop de tentatives. Réessayez dans ${failure.retryAfterSeconds} s.`,
+        });
+      }
       return res.status(401).json({
         authenticated: false,
         passwordRequired: true,
@@ -44,6 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    clearAuthFailures(clientIp);
     const token = createStudioSessionToken();
     res.setHeader('Set-Cookie', buildSessionCookieHeader(token));
     return res.status(200).json({

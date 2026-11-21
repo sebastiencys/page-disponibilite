@@ -6,7 +6,7 @@
 
 Ce dépôt est **100% prêt pour Vercel** avec :
 - Configuration Vite automatique (`vercel.json`)
-- Fonctions Serverless Vercel (`/api/badge.ts`, `/api/status.ts`, `/api/fetch-ics.ts`)
+- Fonctions Serverless Vercel (`/api/badge.ts`, `/api/status.ts`, `/api/health.ts`, `/api/calendar-refresh.ts`, `/api/fetch-ics.ts`)
 - En-têtes HTTP anti-cache automatiques pour que l'image s'actualise à chaque ouverture d'e-mail
 
 ### Déploiement en 1 clic :
@@ -89,6 +89,7 @@ Définissez vos plages de travail, votre fuseau de repli et votre pause déjeune
     - Vous pouvez aussi définir `"enabled": false` pour un jour donné afin de désactiver la pause déjeuner uniquement ce jour-là, ou personnaliser `"label"`.
     - Si rien n'est renseigné pour un jour (absent de `days`, ou champs vides), l'application utilise automatiquement l'horaire global.
 - **`bufferMinutes`** : Marge optionnelle (en minutes) ajoutée avant/après chaque créneau occupé de votre calendrier.
+- **`closures`** *(optionnel)* : Liste de jours fériés ou congés planifiés (`{ "startDate": "2026-12-25", "endDate": "2026-12-25", "label": "Noël", "type": "holiday", "annual": true }`). Passe automatiquement le statut en `HOLIDAY` (sans exposer d'informations sensibles) et saute la période dans le calcul de `Reprise …`.
 
 #### Règles de priorité & synchronisation `.ics` :
 1. **Événements du calendrier `.ics` (priorité absolue)** : Les réunions et rendez-vous issus de `CALENDAR_ICS_URL` (y compris les séries récurrentes `RRULE`, `RDATE`, `EXDATE`, `RECURRENCE-ID`) priment toujours sur tout le reste :
@@ -150,7 +151,7 @@ Toutes les routes publiques de badges sont accessibles sans authentification, av
 | `GET /api/badge.png` (`/badge.png`) | `image/png` | Image PNG anti-aliasée **1,5× (Retina)** avec police `Plus Jakarta Sans` | Signatures e-mail universelles (**Outlook Desktop** inclus) |
 | `GET /api/badge.json` (`/badge.json`) | `application/json; charset=utf-8` | Objet JSON structuré (statut, lignes de texte, compteurs, couleurs) | Scripts, widgets, Raccourcis Apple, Home Assistant, Raycast |
 
-> Vous pouvez également appeler `GET /api/badge?format=png|svg|json`. La route `GET /api/status` renvoie en complément la liste anonymisée des prochains créneaux occupés (`upcomingSlots`) et l'état de synchronisation des agendas (`envCalendars`).
+> Vous pouvez également appeler `GET /api/badge?format=png|svg|json`. La route `GET /api/status` renvoie en complément la liste anonymisée des prochains créneaux occupés (`upcomingSlots`) et l'état de synchronisation des agendas (`envCalendars`). Pour la supervision, `GET /api/health` retourne un état de santé anonymisé (`ok`, `calendarsCount`, `timezone`), et `POST /api/calendar-refresh` (ou `GET /api/status?refresh=1` authentifié Studio) force une resynchronisation immédiate des flux `.ics`.
 
 ### 2. Options (paramètres d'URL)
 
@@ -228,7 +229,7 @@ La route JSON fournit exactement les mêmes informations textuelles et compteurs
 ```
 
 Détail des principaux champs JSON :
-- **`status`** : état détaillé (`AVAILABLE`, `BUSY`, `LUNCH`, `OFF_HOURS`, `OVERRIDE_*`).
+- **`status`** : état détaillé (`AVAILABLE`, `BUSY`, `LUNCH`, `OFF_HOURS`, `HOLIDAY`, `OVERRIDE_*`).
 - **`state`** : état simplifié (`available`, `busy`, `away`, `off`).
 - **`isWorkTime`** : `true` si l'heure courante est dans les horaires travaillés ou occupée par une réunion.
 - **`title`** / **`subtitle`** : lignes 1 et 2 du badge.

@@ -26,11 +26,20 @@ export interface BreakSchedule {
   days?: Partial<Record<DayOfWeek, DayLunchOverride>>;
 }
 
+export interface ClosurePeriod {
+  startDate: string; // "YYYY-MM-DD" (or "MM-DD" with annual: true)
+  endDate?: string;  // inclusive "YYYY-MM-DD" (or "MM-DD"); defaults to startDate
+  label?: string;    // e.g. "Jour férié", "Congés d'été"
+  type?: 'holiday' | 'vacation';
+  annual?: boolean;
+}
+
 export interface ScheduleConfig {
   timezone: string;
   days: Record<DayOfWeek, DaySchedule>;
   lunchBreak: BreakSchedule;
   bufferMinutes: number; // buffer before/after meetings
+  closures?: ClosurePeriod[];
 }
 
 export interface CalendarEvent {
@@ -64,6 +73,7 @@ export type AvailabilityStatus =
   | 'BUSY'
   | 'LUNCH'
   | 'OFF_HOURS'
+  | 'HOLIDAY'
   | 'OVERRIDE_BUSY'
   | 'OVERRIDE_AVAILABLE'
   | 'OVERRIDE_BREAK'
@@ -305,6 +315,43 @@ function addDaysToDateStr(dateStr: string, days: number): string {
 }
 
 /**
+ * Checks whether a local calendar date ("YYYY-MM-DD") falls inside a configured
+ * closure or holiday period in `schedule.closures`.
+ */
+export function getClosureForDate(
+  dateStr: string,
+  schedule: ScheduleConfig
+): ClosurePeriod | null {
+  const closures = schedule.closures;
+  if (!Array.isArray(closures) || closures.length === 0) return null;
+  const mmdd = dateStr.slice(5, 10);
+
+  for (const closure of closures) {
+    if (!closure || typeof closure.startDate !== 'string') continue;
+    const rawStart = closure.startDate.trim();
+    if (!rawStart) continue;
+    const rawEnd = (closure.endDate || rawStart).trim();
+
+    if (closure.annual || /^\d{2}-\d{2}$/.test(rawStart)) {
+      const startMd = /^\d{4}-\d{2}-\d{2}$/.test(rawStart) ? rawStart.slice(5, 10) : rawStart;
+      const endMd = /^\d{4}-\d{2}-\d{2}$/.test(rawEnd) ? rawEnd.slice(5, 10) : rawEnd;
+      if (startMd <= endMd) {
+        if (mmdd >= startMd && mmdd <= endMd) return closure;
+      } else {
+        // Year wrap-around (e.g. 12-24 to 01-03)
+        if (mmdd >= startMd || mmdd <= endMd) return closure;
+      }
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(rawStart)) {
+      const endFull = /^\d{4}-\d{2}-\d{2}$/.test(rawEnd) && rawEnd >= rawStart ? rawEnd : rawStart;
+      if (dateStr >= rawStart && dateStr <= endFull) {
+        return closure;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Expands all-day events onto each covered day using that day's configured start/end hours,
  * even when that day is normally marked `enabled: false` in schedule.days.
  * Timed events are preserved verbatim so meetings outside work hours are still respected.
@@ -463,6 +510,9 @@ export function getNextWorkStart(
 
   for (let offset = 0; offset <= 60; offset++) {
     const dateStr = offset === 0 ? todayDateStr : addDaysToDateStr(todayDateStr, offset);
+    if (getClosureForDate(dateStr, schedule)) {
+      continue;
+    }
     const dayOfWeek = new Date(`${dateStr}T12:00:00Z`).getUTCDay() as DayOfWeek;
     const dayConfig = schedule.days[dayOfWeek];
     if (!dayConfig || !dayConfig.enabled) {
@@ -644,10 +694,14 @@ export function calculateAvailability(
       )
     );
     const activeCalendarLabel = activeLabels.length > 0 ? activeLabels.join(' • ') : undefined;
-    const displayLabelForTitle =
-      activeCalendarLabel && activeCalendarLabel.length > 24
-        ? `${activeCalendarLabel.slice(0, 23).trimEnd()}…`
+    const compactMultiLabel =
+      activeLabels.length > 2
+        ? `${activeLabels.slice(0, 2).join(' • ')} +${activeLabels.length - 2}`
         : activeCalendarLabel;
+    const displayLabelForTitle =
+      compactMultiLabel && compactMultiLabel.length > 24
+        ? `${compactMultiLabel.slice(0, 23).trimEnd()}…`
+        : compactMultiLabel;
     const busyTitle = displayLabelForTitle
       ? `En réunion / Occupé (${displayLabelForTitle})`
       : 'En réunion / Occupé';
@@ -698,6 +752,28 @@ export function calculateAvailability(
 
   const currentDay = zoned.dayOfWeek;
   const currentMinutes = zoned.hour * 60 + zoned.minute;
+  const todayDateStr = `${zoned.year}-${String(zoned.month).padStart(2, '0')}-${String(zoned.day).padStart(2, '0')}`;
+
+  // 1b. Check configured closures / public holidays (events above still take priority if scheduled)
+  const activeClosure = getClosureForDate(todayDateStr, schedule);
+  if (activeClosure) {
+    const nextStart = getNextWorkStart(now, schedule, timeZone, [], sortedEvents);
+    const defaultClosureTitle = activeClosure.type === 'holiday' ? 'Jour férié' : 'En congés';
+    return {
+      status: 'HOLIDAY',
+      state: 'off',
+      badgeColor: '#64748B',
+      dotColor: '#475569',
+      title: activeClosure.label?.trim() || defaultClosureTitle,
+      subtitle: `Reprise ${nextStart.text}`,
+      isWorkTime: false,
+      nextFreeTime: nextStart.text,
+      nextChangeDate: nextStart.date,
+      todayAppointmentsCount,
+      todayAllDayAppointmentsCount,
+    };
+  }
+
   const daySchedule = schedule.days[currentDay];
 
   // 2. Check if today is a working day (e.g. weekend or day off)

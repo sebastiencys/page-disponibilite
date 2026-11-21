@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Lock,
   FileCode,
+  CalendarOff,
 } from 'lucide-react';
 import {
   getEffectiveLunchBreak,
@@ -202,6 +203,58 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                 </div>
               );
             })()}
+          </div>
+
+          {/* Holidays & Closures Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <CalendarOff className="w-5 h-5 text-violet-500 dark:text-violet-400" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Jours fériés & Congés</h3>
+              </div>
+              <span className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                config/schedule.json
+              </span>
+            </div>
+
+            {Array.isArray(schedule.closures) && schedule.closures.length > 0 ? (
+              <div className="space-y-2">
+                {schedule.closures.map((closure, idx) => {
+                  const rangeLabel =
+                    closure.endDate && closure.endDate !== closure.startDate
+                      ? `${closure.startDate} → ${closure.endDate}`
+                      : closure.startDate;
+                  return (
+                    <div
+                      key={`${closure.startDate}-${idx}`}
+                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-violet-50/70 dark:bg-violet-950/30 border border-violet-200/80 dark:border-violet-800/60 text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-semibold text-violet-950 dark:text-violet-100 truncate">
+                          {closure.label || (closure.type === 'vacation' ? 'Congés' : 'Jour férié')}
+                        </span>
+                        {closure.annual && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-100 dark:bg-violet-900/70 text-violet-700 dark:text-violet-300 shrink-0">
+                            Annuel
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono font-semibold text-violet-800 dark:text-violet-200 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-md border border-violet-200 dark:border-violet-800/70 shrink-0">
+                        {rangeLabel}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Aucune fermeture planifiée. Vous pouvez ajouter des jours fériés ou congés via le tableau{' '}
+                <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-slate-700 dark:text-slate-200">
+                  "closures"
+                </code>{' '}
+                dans <code className="font-mono">config/schedule.json</code>.
+              </p>
+            )}
           </div>
         </div>
 

@@ -160,9 +160,12 @@ export default function App() {
   };
 
   // Fetch live status from server (which evaluates schedule.json + private CALENDAR_ICS_URL + process.env.TIMEZONE)
-  const fetchServerStatus = useCallback(async () => {
+  const fetchServerStatus = useCallback(async (forceRefresh = false) => {
     try {
-      const res = await fetch('/api/status');
+      const endpoint = forceRefresh ? '/api/status?refresh=1' : '/api/status';
+      const res = await fetch(endpoint, {
+        headers: forceRefresh && studioToken ? { Authorization: `Bearer ${studioToken}` } : {},
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.availability) {
@@ -191,7 +194,7 @@ export default function App() {
       // Fallback to local computation with timezone
       setAvailability(calculateAvailability(new Date(), DEFAULT_SCHEDULE, [], { type: 'auto' }, timezone));
     }
-  }, [timezone]);
+  }, [studioToken, timezone]);
 
   // Initial check, interval polling every 10 seconds, and immediate refresh when tab wakes up
   useEffect(() => {
@@ -257,9 +260,7 @@ export default function App() {
         setIsStudioAuthenticated(false);
         return;
       }
-      if (res.ok) {
-        await fetchServerStatus();
-      }
+      await fetchServerStatus(true);
     } finally {
       setIsSyncing(false);
     }
@@ -279,10 +280,10 @@ export default function App() {
             return;
           }
         } catch {
-          // Ignore calendar refresh network errors and still refresh status
+          // Ignore calendar refresh network errors and still refresh status via ?refresh=1
         }
       }
-      await fetchServerStatus();
+      await fetchServerStatus(forceCalendarSync);
     },
     [fetchServerStatus, passwordRequired, studioToken]
   );
@@ -316,6 +317,7 @@ export default function App() {
             schedule={DEFAULT_SCHEDULE}
             timezone={timezone}
             upcomingSlots={upcomingSlots}
+            calendars={calendarsSummary}
             onGoToStudio={() => setCurrentTab('signature')}
           />
         )}

@@ -11,6 +11,7 @@ import {
   getEffectiveLunchBreak,
   getTodayAppointmentsCount,
   getCalendarSummaries,
+  getClosureForDate,
   formatTimeShort,
   type CalendarEvent,
   type ScheduleConfig,
@@ -652,5 +653,95 @@ test('multi-calendar labels propagate to BUSY title, anonymized slots, and per-c
     { id: 'vide', label: 'Vide', todayAppointmentsCount: 0, todayAllDayAppointmentsCount: 0, isBusyNow: false },
   ]);
 });
+
+test('multi-calendar with more than 2 simultaneous busy calendars builds compact summary with +N', () => {
+  const tz = 'Europe/Paris';
+  const monday = parisDate('2026-11-09T10:15:00');
+  const events: CalendarEvent[] = [
+    {
+      id: 'c1',
+      title: 'A',
+      start: parisDate('2026-11-09T10:00:00').toISOString(),
+      end: parisDate('2026-11-09T11:00:00').toISOString(),
+      isBusy: true,
+      calendarLabel: 'Pro',
+    },
+    {
+      id: 'c2',
+      title: 'B',
+      start: parisDate('2026-11-09T10:00:00').toISOString(),
+      end: parisDate('2026-11-09T11:00:00').toISOString(),
+      isBusy: true,
+      calendarLabel: 'Perso',
+    },
+    {
+      id: 'c3',
+      title: 'C',
+      start: parisDate('2026-11-09T10:00:00').toISOString(),
+      end: parisDate('2026-11-09T11:00:00').toISOString(),
+      isBusy: true,
+      calendarLabel: 'Cabinet Nord',
+    },
+  ];
+  const avail = calculateAvailability(monday, TEST_SCHEDULE, events, undefined, tz);
+  assert.equal(avail.status, 'BUSY');
+  assert.equal(avail.activeCalendarLabel, 'Pro • Perso • Cabinet Nord');
+  assert.equal(avail.title, 'En réunion / Occupé (Pro • Perso +1)');
+});
+
+test('closures / holidays trigger HOLIDAY status, skip entire closure in getNextWorkStart, yet keep timed ICS meetings priority', () => {
+  const tz = 'Europe/Paris';
+  const scheduleWithClosures: ScheduleConfig = {
+    ...TEST_SCHEDULE,
+    closures: [
+      {
+        startDate: '2026-11-11',
+        endDate: '2026-11-12',
+        label: 'Armistice & Pont',
+        type: 'holiday',
+      },
+      {
+        startDate: '12-25',
+        label: 'Noël',
+        type: 'holiday',
+        annual: true,
+      },
+    ],
+  };
+
+  assert.equal(getClosureForDate('2026-11-11', scheduleWithClosures)?.label, 'Armistice & Pont');
+  assert.equal(getClosureForDate('2026-11-12', scheduleWithClosures)?.label, 'Armistice & Pont');
+  assert.equal(getClosureForDate('2026-11-13', scheduleWithClosures), null);
+  assert.equal(getClosureForDate('2027-12-25', scheduleWithClosures)?.label, 'Noël');
+
+  // Wednesday Nov 11 at 10:00 -> HOLIDAY, Reprise vendredi à 09h00 (skips Nov 11 & Nov 12)
+  const wedHoliday = parisDate('2026-11-11T10:00:00');
+  const holidayResult = calculateAvailability(wedHoliday, scheduleWithClosures, [], undefined, tz);
+  assert.equal(holidayResult.status, 'HOLIDAY');
+  assert.equal(holidayResult.state, 'off');
+  assert.equal(holidayResult.isWorkTime, false);
+  assert.equal(holidayResult.title, 'Armistice & Pont');
+  assert.equal(holidayResult.subtitle, 'Reprise vendredi à 09h00');
+
+  // Tuesday evening Nov 10 -> next work start skips Nov 11 & 12 to Friday Nov 13 09h00
+  const tueEvening = parisDate('2026-11-10T19:00:00');
+  const next = getNextWorkStart(tueEvening, scheduleWithClosures, tz, []);
+  assert.equal(next.text, 'vendredi à 09h00');
+
+  // Explicit timed ICS meeting during holiday still shows BUSY
+  const timedDuringHoliday: CalendarEvent[] = [
+    {
+      id: 'urgent',
+      title: 'Astreinte',
+      start: parisDate('2026-11-11T09:30:00').toISOString(),
+      end: parisDate('2026-11-11T10:30:00').toISOString(),
+      isBusy: true,
+    },
+  ];
+  const busyHoliday = calculateAvailability(wedHoliday, scheduleWithClosures, timedDuringHoliday, undefined, tz);
+  assert.equal(busyHoliday.status, 'BUSY');
+  assert.equal(busyHoliday.subtitle, 'Libre à 10h30');
+});
+
 
 

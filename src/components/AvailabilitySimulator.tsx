@@ -24,6 +24,7 @@ import {
   createDateInTimezone,
   getZonedDateParts,
   getEffectiveLunchBreak,
+  getClosureForDate,
   formatTimeShort,
   type ScheduleConfig,
   type UserProfile,
@@ -169,6 +170,18 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
     return getZonedDateParts(simulatedDate, timezone);
   }, [simulatedDate, timezone]);
 
+  const simulatedDateStr = useMemo(() => {
+    const y = simulatedParts.year;
+    const m = String(simulatedParts.month).padStart(2, '0');
+    const d = String(simulatedParts.day).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [simulatedParts]);
+
+  const activeClosure = useMemo(
+    () => getClosureForDate(simulatedDateStr, schedule),
+    [simulatedDateStr, schedule]
+  );
+
   const daySchedule = schedule.days[simulatedParts.dayOfWeek];
   const dayLunchBreak = useMemo(
     () => getEffectiveLunchBreak(schedule, simulatedParts.dayOfWeek),
@@ -289,9 +302,21 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
     setTimeout(() => setCopiedStyle(null), 2000);
   };
 
-  const getSimulatedPngUrl = (style: BadgeStyle) => {
+  const buildCommonParams = () => {
     const iso = simulatedDate.toISOString();
-    return `${appBaseUrl}/api/badge.png?style=${style}&theme=${theme}&time=${encodeURIComponent(iso)}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}`;
+    return `time=${encodeURIComponent(iso)}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}`;
+  };
+
+  const getSimulatedPngUrl = (style: BadgeStyle) => {
+    return `${appBaseUrl}/api/badge.png?style=${style}&theme=${theme}&${buildCommonParams()}`;
+  };
+
+  const getSimulatedSvgUrl = (style: BadgeStyle) => {
+    return `${appBaseUrl}/api/badge.svg?style=${style}&theme=${theme}&${buildCommonParams()}`;
+  };
+
+  const getSimulatedJsonUrl = () => {
+    return `${appBaseUrl}/api/badge.json?${buildCommonParams()}`;
   };
 
   return (
@@ -556,7 +581,11 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">
             <span className="text-slate-400 dark:text-slate-400 block font-medium">1. Horaires du jour ({currentDayName})</span>
             <span className="font-semibold text-slate-800 dark:text-slate-100">
-              {daySchedule?.enabled ? `${daySchedule.start} - ${daySchedule.end}` : 'Fermé (Jour non travaillé)'}
+              {activeClosure
+                ? `Fermé — ${activeClosure.label || (activeClosure.type === 'vacation' ? 'Congés' : 'Jour férié')}`
+                : daySchedule?.enabled
+                ? `${daySchedule.start} - ${daySchedule.end}`
+                : 'Fermé (Jour non travaillé)'}
             </span>
           </div>
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">
@@ -589,14 +618,27 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
               Tous les rendus sont calculés en temps réel avec vos polices officielles Plus Jakarta Sans.
             </p>
           </div>
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Thème sélectionné : <strong className="text-indigo-600 dark:text-indigo-400 capitalize">{theme}</strong>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
+            <span>
+              Thème sélectionné : <strong className="text-indigo-600 dark:text-indigo-400 capitalize">{theme}</strong>
+            </span>
+            <a
+              href={getSimulatedJsonUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300 rounded-lg border border-slate-200/80 dark:border-slate-700 transition-colors"
+              title="Tester la sortie texte JSON simulée via l'API"
+            >
+              <span>Tester en JSON</span>
+              <ExternalLink className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
+            </a>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {badges.map(b => {
             const pngUrl = getSimulatedPngUrl(b.id);
+            const svgUrl = getSimulatedSvgUrl(b.id);
             const isCopied = copiedStyle === b.id;
 
             return (
@@ -654,6 +696,17 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
                         </>
                       )}
                     </button>
+
+                    <a
+                      href={svgUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors cursor-pointer"
+                      title="Générer et afficher le SVG simulé via l'API"
+                    >
+                      <span>Tester en SVG</span>
+                      <ExternalLink className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                    </a>
 
                     <a
                       href={pngUrl}

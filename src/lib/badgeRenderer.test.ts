@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateAvailability, type ScheduleConfig } from './availability.ts';
 import { renderBadgeSvg, renderBadgePng, buildBadgeTextPayload } from './badgeRenderer.ts';
+import { truncateBadgeText } from './badgeSvg.ts';
 
 const TEST_SCHEDULE: ScheduleConfig = {
   timezone: 'Europe/Paris',
@@ -296,3 +297,31 @@ test('buildBadgeTextPayload returns structured text lines matching badge labels'
   });
   assert.equal(payloadMixed.appointmentsLabel, "2 RDV (dont journée entière) aujourd'hui");
 });
+
+test('truncateBadgeText prevents text overflow inside fixed-width pill, card, and signature SVGs', () => {
+  assert.equal(truncateBadgeText('Court', 20), 'Court');
+  const trimmed = truncateBadgeText('Texte extrêmement long qui doit être coupé', 15);
+  assert.equal(trimmed.length, 15);
+  assert.ok(trimmed.endsWith('…'));
+
+  const now = new Date('2026-11-09T10:15:00+01:00');
+  const baseAvail = calculateAvailability(now, TEST_SCHEDULE, []);
+  const longAvail = {
+    ...baseAvail,
+    title: 'En réunion très urgente avec beaucoup trop de caractères pour un petit badge',
+    subtitle: 'Reprise exceptionnelle après une longue absence prévue lundi prochain à 08h30',
+  };
+
+  const pillSvg = renderBadgeSvg(longAvail, { style: 'pill', theme: 'light' });
+  assert.ok(!pillSvg.includes(longAvail.title));
+  assert.ok(!pillSvg.includes(longAvail.subtitle));
+  assert.ok(pillSvg.includes('…'));
+
+  const cardSvg = renderBadgeSvg(longAvail, {
+    style: 'card',
+    name: 'Dr Jean-Baptiste-Alexandre De La Rochefoucauld',
+  });
+  assert.ok(!cardSvg.includes('De La Rochefoucauld'));
+  assert.ok(cardSvg.includes('…'));
+});
+

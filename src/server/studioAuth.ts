@@ -141,3 +141,99 @@ export function buildSessionCookieHeader(token: string, maxAgeSeconds = 12 * 60 
 export function buildClearSessionCookieHeader(): string {
   return `${STUDIO_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
+
+export const AUTH_MAX_FAILURES = 5;
+export const AUTH_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+export const AUTH_LOCKOUT_MS = 60 * 1000;     // 60 seconds lockout after 5 failures
+
+interface FailureRecord {
+  count: number;
+  windowStartMs: number;
+  lockedUntilMs: number;
+}
+
+const authFailuresByClient = new Map<string, FailureRecord>();
+
+export function extractClientIp(
+  headers: Record<string, string | string[] | undefined>,
+  remoteAddress?: string
+): string {
+  const fwdRaw = headers['x-forwarded-for'] ?? headers['X-Forwarded-For'];
+  const fwdHeader = Array.isArray(fwdRaw) ? fwdRaw[0] : fwdRaw;
+  if (typeof fwdHeader === 'string' && fwdHeader.trim()) {
+    const firstIp = fwdHeader.split(',')[0]?.trim();
+    if (firstIp) return firstIp;
+  }
+  const realIpRaw = headers['x-real-ip'] ?? headers['X-Real-IP'];
+  const realIp = Array.isArray(realIpRaw) ? realIpRaw[0] : realIpRaw;
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return realIp.trim();
+  }
+  return remoteAddress?.trim() || 'unknown';
+}
+
+export function checkAuthRateLimit(
+  clientKey: string,
+  nowMs: number = Date.now()
+): { allowed: boolean; retryAfterSeconds: number; remainingAttempts: number } {
+  const record = authFailuresByClient.get(clientKey);
+  if (!record) {
+    return { allowed: true, retryAfterSeconds: 0, remainingAttempts: AUTH_MAX_FAILURES };
+  }
+
+  if (record.lockedUntilMs > nowMs) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((record.lockedUntilMs - nowMs) / 1000));
+    return { allowed: false, retryAfterSeconds, remainingAttempts: 0 };
+  }
+
+  if (nowMs - record.windowStartMs >= AUTH_WINDOW_MS || record.lockedUntilMs > 0) {
+    authFailuresByClient.delete(clientKey);
+    return { allowed: true, retryAfterSeconds: 0, remainingAttempts: AUTH_MAX_FAILURES };
+  }
+
+  return {
+    allowed: true,
+    retryAfterSeconds: 0,
+    remainingAttempts: Math.max(0, AUTH_MAX_FAILURES - record.count),
+  };
+}
+
+export function recordAuthFailure(
+  clientKey: string,
+  nowMs: number = Date.now()
+): { allowed: boolean; retryAfterSeconds: number; remainingAttempts: number } {
+  const existing = authFailuresByClient.get(clientKey);
+  let record: FailureRecord;
+
+  if (!existing || nowMs - existing.windowStartMs >= AUTH_WINDOW_MS) {
+    record = { count: 1, windowStartMs: nowMs, lockedUntilMs: 0 };
+  } else {
+    record = {
+      count: existing.count + 1,
+      windowStartMs: existing.windowStartMs,
+      lockedUntilMs: existing.lockedUntilMs,
+    };
+  }
+
+  if (record.count >= AUTH_MAX_FAILURES) {
+    record.lockedUntilMs = nowMs + AUTH_LOCKOUT_MS;
+    authFailuresByClient.set(clientKey, record);
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.ceil(AUTH_LOCKOUT_MS / 1000),
+      remainingAttempts: 0,
+    };
+  }
+
+  authFailuresByClient.set(clientKey, record);
+  return {
+    allowed: true,
+    retryAfterSeconds: 0,
+    remainingAttempts: AUTH_MAX_FAILURES - record.count,
+  };
+}
+
+export function clearAuthFailures(clientKey: string): void {
+  authFailuresByClient.delete(clientKey);
+}
+

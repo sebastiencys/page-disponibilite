@@ -60,6 +60,18 @@ export const EmailGuideModal: React.FC = () => {
         </div>
       </div>
 
+      {/* Webmail Proxy Cache Notice */}
+      <div className="rounded-2xl border border-amber-200/80 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/30 p-5 flex items-start gap-3.5">
+        <HelpCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div className="space-y-1 text-xs leading-relaxed text-amber-950 dark:text-amber-100">
+          <p className="font-bold">À savoir : cache proxy des webmails (Gmail &amp; Apple Mail)</p>
+          <p className="text-amber-900/90 dark:text-amber-200/90">
+            Gmail (<code className="font-mono bg-amber-100/80 dark:bg-amber-900/60 px-1 py-0.5 rounded text-[11px]">googleusercontent.com</code>) et{' '}
+            <strong>Apple Mail Privacy Protection</strong> passent les images par leurs propres serveurs proxy et peuvent conserver en cache l'image d'un e-mail déjà ouvert pendant plusieurs minutes à quelques heures. En revanche, chaque nouvel e-mail ouvert déclenche un appel frais, et le lien cliquable vers votre <strong>page publique</strong> (ainsi que le flux <code className="font-mono">/api/badge.json</code>) reflète toujours votre statut à la seconde près.
+          </p>
+        </div>
+      </div>
+
       {/* Step by Step Tutorials */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xs space-y-8">
         <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
