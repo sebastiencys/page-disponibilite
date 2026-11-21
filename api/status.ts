@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   calculateAvailability,
   getAnonymizedUpcomingSlots,
+  getCalendarSummaries,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type CalendarEvent,
@@ -33,12 +34,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const avail = calculateAvailability(now, DEFAULT_SCHEDULE, events, undefined, timezone);
   const upcomingSlots = getAnonymizedUpcomingSlots(events, now, 8, DEFAULT_SCHEDULE, timezone);
+  const calendarSummaries = getCalendarSummaries(
+    now,
+    events,
+    DEFAULT_SCHEDULE,
+    timezone,
+    synced.calendars.map(c => ({ id: c.id, label: c.label }))
+  );
 
   return res.status(200).json({
     now: now.toISOString(),
     timezone,
     availability: avail,
     hasEnvCalendar: hasEnvCalendar(),
+    calendars: calendarSummaries,
+    envCalendars: synced.calendars,
     upcomingSlots,
     profile: {
       name: DEFAULT_PROFILE.name,

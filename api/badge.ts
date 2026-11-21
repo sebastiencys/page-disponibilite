@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   calculateAvailability,
+  getCalendarSummaries,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type ScheduleConfig,
@@ -76,12 +77,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Expires', '0');
 
   if (format === 'json') {
+    const calendarSummaries = getCalendarSummaries(
+      now,
+      events,
+      schedule,
+      timezone,
+      synced.calendars.map(c => ({ id: c.id, label: c.label }))
+    );
     const payload = buildBadgeTextPayload(avail, {
       name: safeName,
       role: safeRole,
       company: safeCompany,
       timezone,
       now,
+      calendars: calendarSummaries,
     });
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     return res.status(200).send(JSON.stringify(payload, null, 2));

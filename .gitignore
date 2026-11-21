@@ -6,6 +6,4 @@ coverage/
 *.log
 .env*
 !.env.example
-config/personal.json
-config/schedule.json
 !config/*.example

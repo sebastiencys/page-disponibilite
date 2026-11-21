@@ -8,6 +8,7 @@ import { parse } from 'node:url';
 import {
   calculateAvailability,
   getAnonymizedUpcomingSlots,
+  getCalendarSummaries,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type ScheduleConfig,
@@ -26,6 +27,8 @@ import { parseIcsEvents } from '../lib/icalParser.ts';
 import {
   hasEnvCalendar,
   getSyncedCalendarEvents,
+  validateExternalCalendarUrl,
+  type SyncedCalendarInfo,
 } from './calendarSync.ts';
 import {
   isStudioPasswordRequired,
@@ -71,14 +74,29 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-async function resolveCurrentEvents(targetTime?: Date): Promise<CalendarEvent[]> {
+async function resolveCurrentCalendarState(
+  targetTime?: Date
+): Promise<{ events: CalendarEvent[]; calendars: SyncedCalendarInfo[] }> {
   if (hasEnvCalendar() || globalStore.icsUrl) {
-    const { events } = await getSyncedCalendarEvents(globalStore.icsUrl, false, targetTime);
+    const { events, calendars } = await getSyncedCalendarEvents(
+      globalStore.icsUrl,
+      false,
+      targetTime
+    );
     if (events && events.length > 0) {
-      return events;
+      return { events, calendars };
+    }
+    if (calendars.length > 0) {
+      const anyOk = calendars.some(c => c.ok);
+      return { events: anyOk ? events : globalStore.events, calendars };
     }
   }
-  return globalStore.events;
+  return { events: globalStore.events, calendars: [] };
+}
+
+async function resolveCurrentEvents(targetTime?: Date): Promise<CalendarEvent[]> {
+  const { events } = await resolveCurrentCalendarState(targetTime);
+  return events;
 }
 
 export async function handleApiRequest(
@@ -164,15 +182,16 @@ export async function handleApiRequest(
     return true;
   }
 
-  // Calendar info endpoint (tells the client if CALENDAR_ICS_URL is set in env without leaking it)
+  // Calendar info endpoint (tells the client if CALENDAR_ICS_URL* are set in env without leaking URLs)
   if (pathname === '/api/calendar-info') {
-    const currentEvents = await resolveCurrentEvents();
+    const { events, calendars } = await resolveCurrentCalendarState();
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.end(
       JSON.stringify({
         hasEnvCalendar: hasEnvCalendar(),
-        eventCount: currentEvents.length,
+        eventCount: events.length,
+        calendars,
       })
     );
     return true;
@@ -186,7 +205,10 @@ export async function handleApiRequest(
       res.end(JSON.stringify({ error: 'Authentification Studio requise' }));
       return true;
     }
-    const { events, fromCache, lastSync } = await getSyncedCalendarEvents(globalStore.icsUrl, true);
+    const { events, fromCache, lastSync, calendars } = await getSyncedCalendarEvents(
+      globalStore.icsUrl,
+      true
+    );
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.end(
@@ -195,6 +217,7 @@ export async function handleApiRequest(
         count: events.length,
         fromCache,
         lastSync: lastSync ? lastSync.toISOString() : null,
+        calendars,
       })
     );
     return true;
@@ -274,13 +297,21 @@ export async function handleApiRequest(
       if (!isNaN(parsed.getTime())) now = parsed;
     }
 
-    const currentEvents = await resolveCurrentEvents(now);
+    const { events: currentEvents, calendars: syncedCalendars } =
+      await resolveCurrentCalendarState(now);
     const avail = calculateAvailability(
       now,
       globalStore.schedule,
       currentEvents,
       globalStore.override,
       serverTimezone
+    );
+    const calendarSummaries = getCalendarSummaries(
+      now,
+      currentEvents,
+      globalStore.schedule,
+      serverTimezone,
+      syncedCalendars.map(c => ({ id: c.id, label: c.label }))
     );
 
     const payload = buildBadgeTextPayload(avail, {
@@ -289,6 +320,7 @@ export async function handleApiRequest(
       company: sanitizeQueryField(query.company, globalStore.company),
       timezone: serverTimezone,
       now,
+      calendars: calendarSummaries,
     });
 
     serveJson(res, payload);
@@ -302,7 +334,8 @@ export async function handleApiRequest(
       const parsed = new Date(query.time);
       if (!isNaN(parsed.getTime())) now = parsed;
     }
-    const currentEvents = await resolveCurrentEvents(now);
+    const { events: currentEvents, calendars: syncedCalendars } =
+      await resolveCurrentCalendarState(now);
     const avail = calculateAvailability(
       now,
       globalStore.schedule,
@@ -317,6 +350,13 @@ export async function handleApiRequest(
       globalStore.schedule,
       serverTimezone
     );
+    const calendarSummaries = getCalendarSummaries(
+      now,
+      currentEvents,
+      globalStore.schedule,
+      serverTimezone,
+      syncedCalendars.map(c => ({ id: c.id, label: c.label }))
+    );
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
@@ -327,6 +367,8 @@ export async function handleApiRequest(
         timezone: serverTimezone,
         availability: avail,
         hasEnvCalendar: hasEnvCalendar(),
+        calendars: calendarSummaries,
+        envCalendars: syncedCalendars,
         upcomingSlots,
         profile: {
           name: globalStore.name,
@@ -385,8 +427,7 @@ export async function handleApiRequest(
         return true;
       }
 
-      // Convert webcal:// to https://
-      const fetchUrl = url.replace(/^webcal:\/\//i, 'https://');
+      const fetchUrl = validateExternalCalendarUrl(url);
       const response = await fetch(fetchUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch ICS: ${response.statusText}`);

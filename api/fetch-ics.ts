@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { DEFAULT_SCHEDULE } from '../src/lib/availability.ts';
 import { parseIcsEvents } from '../src/lib/icalParser.ts';
 import { isRequestStudioAuthenticated } from '../src/server/studioAuth.ts';
+import { validateExternalCalendarUrl } from '../src/server/calendarSync.ts';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -26,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'URL required' });
     }
 
-    const fetchUrl = url.replace(/^webcal:\/\//i, 'https://');
+    const fetchUrl = validateExternalCalendarUrl(url);
     const response = await fetch(fetchUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch ICS: ${response.statusText}`);

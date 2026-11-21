@@ -42,6 +42,8 @@ export interface CalendarEvent {
   allDayStartDate?: string; // "YYYY-MM-DD"
   allDayEndDate?: string;   // "YYYY-MM-DD" (exclusive per RFC 5545)
   isBusy?: boolean; // true if marks user as busy (default true)
+  calendarId?: string;    // Source calendar identifier (e.g. "pro", "perso")
+  calendarLabel?: string; // Public category label for source calendar (e.g. "Pro", "Perso")
 }
 
 import scheduleJson from '../../config/schedule.json' with { type: 'json' };
@@ -85,12 +87,23 @@ export interface AvailabilityResult {
   nextChangeDate?: Date;
   todayAppointmentsCount?: number; // Busy appointments strictly on the current local day [00:00, 24:00)
   todayAllDayAppointmentsCount?: number; // Subset of todayAppointmentsCount lasting all day or full workday
+  activeCalendarLabel?: string; // Label(s) of calendar(s) causing current BUSY state
 }
 
 export interface AnonymizedSlot {
   start: string; // ISO string
   end: string;   // ISO string
   label: string; // "Créneau réservé"
+  calendarLabel?: string; // Optional merged label(s) e.g. "Pro" or "Pro • Perso"
+  calendarLabels?: string[];
+}
+
+export interface CalendarSummaryItem {
+  id: string;
+  label: string;
+  todayAppointmentsCount: number;
+  todayAllDayAppointmentsCount: number;
+  isBusyNow: boolean;
 }
 
 export const DEFAULT_SCHEDULE: ScheduleConfig = scheduleJson as unknown as ScheduleConfig;
@@ -617,6 +630,28 @@ export function calculateAvailability(
   });
 
   if (currentEvent) {
+    // Collect all currently active busy events (in case multiple calendars overlap at `now`)
+    const activeEvents = sortedEvents.filter(e => {
+      const bufferedStart = e.startDate.getTime() - bufferMs;
+      const bufferedEnd = e.endDate.getTime() + bufferMs;
+      return nowMs >= bufferedStart && nowMs < bufferedEnd;
+    });
+    const activeLabels = Array.from(
+      new Set(
+        activeEvents
+          .map(e => e.calendarLabel?.trim())
+          .filter((lbl): lbl is string => Boolean(lbl))
+      )
+    );
+    const activeCalendarLabel = activeLabels.length > 0 ? activeLabels.join(' • ') : undefined;
+    const displayLabelForTitle =
+      activeCalendarLabel && activeCalendarLabel.length > 24
+        ? `${activeCalendarLabel.slice(0, 23).trimEnd()}…`
+        : activeCalendarLabel;
+    const busyTitle = displayLabelForTitle
+      ? `En réunion / Occupé (${displayLabelForTitle})`
+      : 'En réunion / Occupé';
+
     // Find next free time (check if another event is chained directly)
     let freeTime = currentEvent.endDate;
     for (const upcoming of sortedEvents) {
@@ -634,13 +669,14 @@ export function calculateAvailability(
         state: 'busy',
         badgeColor: '#EF4444',
         dotColor: '#DC2626',
-        title: 'En réunion / Occupé',
+        title: busyTitle,
         subtitle: `Reprise ${nextStart.text}`,
         isWorkTime: true,
         nextFreeTime: nextStart.text,
         nextChangeDate: nextStart.date,
         todayAppointmentsCount,
         todayAllDayAppointmentsCount,
+        ...(activeCalendarLabel ? { activeCalendarLabel } : {}),
       };
     }
 
@@ -649,13 +685,14 @@ export function calculateAvailability(
       state: 'busy',
       badgeColor: '#EF4444',
       dotColor: '#DC2626',
-      title: 'En réunion / Occupé',
+      title: busyTitle,
       subtitle: `Libre à ${formatTimeShort(freeTime, timeZone)}`,
       isWorkTime: true,
       nextFreeTime: formatTimeShort(freeTime, timeZone),
       nextChangeDate: freeTime,
       todayAppointmentsCount,
       todayAllDayAppointmentsCount,
+      ...(activeCalendarLabel ? { activeCalendarLabel } : {}),
     };
   }
 
@@ -779,7 +816,7 @@ export function calculateAvailability(
 /**
  * Returns a privacy-safe, anonymized list of upcoming busy slots.
  * Strips all personal details (titles, descriptions, locations, participants)
- * and merges contiguous or overlapping meetings.
+ * and merges contiguous or overlapping meetings while preserving optional calendar labels.
  */
 export function getAnonymizedUpcomingSlots(
   events: CalendarEvent[],
@@ -800,19 +837,27 @@ export function getAnonymizedUpcomingSlots(
     .map(evt => {
       const startMs = Math.max(new Date(evt.start).getTime(), fromMs);
       const endMs = new Date(evt.end).getTime();
-      return { startMs, endMs };
+      const calendarLabel = evt.calendarLabel?.trim() || undefined;
+      return { startMs, endMs, calendarLabel };
     })
     .sort((a, b) => a.startMs - b.startMs);
 
   if (validEvents.length === 0) return [];
 
-  const merged: { startMs: number; endMs: number }[] = [];
+  const merged: { startMs: number; endMs: number; calendarLabels: string[] }[] = [];
   for (const slot of validEvents) {
     const last = merged[merged.length - 1];
     if (last && slot.startMs <= last.endMs) {
       last.endMs = Math.max(last.endMs, slot.endMs);
+      if (slot.calendarLabel && !last.calendarLabels.includes(slot.calendarLabel)) {
+        last.calendarLabels.push(slot.calendarLabel);
+      }
     } else {
-      merged.push({ startMs: slot.startMs, endMs: slot.endMs });
+      merged.push({
+        startMs: slot.startMs,
+        endMs: slot.endMs,
+        calendarLabels: slot.calendarLabel ? [slot.calendarLabel] : [],
+      });
     }
   }
 
@@ -820,5 +865,65 @@ export function getAnonymizedUpcomingSlots(
     start: new Date(slot.startMs).toISOString(),
     end: new Date(slot.endMs).toISOString(),
     label: 'Créneau réservé',
+    ...(slot.calendarLabels.length > 0
+      ? {
+          calendarLabel: slot.calendarLabels.join(' • '),
+          calendarLabels: slot.calendarLabels,
+        }
+      : {}),
   }));
+}
+
+/**
+ * Computes per-calendar anonymized summary (today's appointment counts & busy status).
+ */
+export function getCalendarSummaries(
+  now: Date,
+  events: CalendarEvent[],
+  schedule: ScheduleConfig = DEFAULT_SCHEDULE,
+  timeZone: string = schedule.timezone || 'Europe/Paris',
+  knownCalendars?: Array<{ id: string; label: string }>
+): CalendarSummaryItem[] {
+  const normalized = normalizeEventsForSchedule(events, schedule, timeZone);
+  const bufferMs = (schedule.bufferMinutes || 0) * 60 * 1000;
+  const nowMs = now.getTime();
+
+  const buckets = new Map<string, { id: string; label: string; events: CalendarEvent[] }>();
+
+  if (knownCalendars) {
+    for (const cal of knownCalendars) {
+      buckets.set(cal.id, { id: cal.id, label: cal.label, events: [] });
+    }
+  }
+
+  for (const evt of normalized) {
+    const id = evt.calendarId || 'default';
+    const label = evt.calendarLabel?.trim() || 'Principal';
+    let bucket = buckets.get(id);
+    if (!bucket) {
+      bucket = { id, label, events: [] };
+      buckets.set(id, bucket);
+    }
+    bucket.events.push(evt);
+  }
+
+  const summaries: CalendarSummaryItem[] = [];
+  for (const bucket of buckets.values()) {
+    const stats = getTodayAppointmentsStats(now, [], schedule, timeZone, bucket.events);
+    const isBusyNow = bucket.events.some(evt => {
+      if (evt.isBusy === false) return false;
+      const startMs = new Date(evt.start).getTime() - bufferMs;
+      const endMs = new Date(evt.end).getTime() + bufferMs;
+      return !isNaN(startMs) && !isNaN(endMs) && nowMs >= startMs && nowMs < endMs;
+    });
+    summaries.push({
+      id: bucket.id,
+      label: bucket.label,
+      todayAppointmentsCount: stats.total,
+      todayAllDayAppointmentsCount: stats.allDayCount,
+      isBusyNow,
+    });
+  }
+
+  return summaries;
 }

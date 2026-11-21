@@ -30,6 +30,7 @@ import {
   type AvailabilityResult,
   type AnonymizedSlot,
   type CalendarEvent,
+  type CalendarSummaryItem,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
 } from '../lib/availability.ts';
@@ -44,6 +45,7 @@ interface AvailabilitySimulatorProps {
   profile?: UserProfile;
   timezone?: string;
   upcomingSlots?: AnonymizedSlot[];
+  calendars?: CalendarSummaryItem[];
   appBaseUrl: string;
   onGoToStudio?: () => void;
 }
@@ -53,6 +55,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   profile = DEFAULT_PROFILE,
   timezone = schedule.timezone || 'Europe/Paris',
   upcomingSlots = [],
+  calendars = [],
   appBaseUrl,
   onGoToStudio,
 }) => {
@@ -115,6 +118,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const [serverSimulation, setServerSimulation] = useState<{
     iso: string;
     availability: AvailabilityResult;
+    calendars?: CalendarSummaryItem[];
   } | null>(null);
 
   // Query server /api/status?time=... so ALL calendar events (recurring, past/future, all-day) are evaluated truthfully
@@ -128,7 +132,11 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
         if (res.ok) {
           const data = await res.json();
           if (data.availability) {
-            setServerSimulation({ iso: simulatedIso, availability: data.availability });
+            setServerSimulation({
+              iso: simulatedIso,
+              availability: data.availability,
+              calendars: Array.isArray(data.calendars) ? data.calendars : undefined,
+            });
           }
         }
       } catch {
@@ -148,6 +156,13 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
     }
     return localSimulatedAvailability;
   }, [serverSimulation, simulatedIso, localSimulatedAvailability]);
+
+  const simulatedCalendars = useMemo<CalendarSummaryItem[]>(() => {
+    if (serverSimulation && serverSimulation.iso === simulatedIso && serverSimulation.calendars) {
+      return serverSimulation.calendars;
+    }
+    return calendars;
+  }, [serverSimulation, simulatedIso, calendars]);
 
   // Simulation day analysis info
   const simulatedParts = useMemo(() => {
@@ -504,6 +519,23 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
                   : '0 RDV ce jour (badges compacts à 2 lignes)'}
               </span>
             </p>
+            {simulatedCalendars.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {simulatedCalendars.map(cal => (
+                  <span
+                    key={cal.id}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+                      cal.isBusyNow
+                        ? 'bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/70'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <span>{cal.label}</span>
+                    <span className="font-bold">{cal.todayAppointmentsCount}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Quick Context Pills */}

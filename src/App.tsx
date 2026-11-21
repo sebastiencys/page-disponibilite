@@ -20,7 +20,9 @@ import {
   type AvailabilityResult,
   type UserProfile,
   type AnonymizedSlot,
+  type CalendarSummaryItem,
 } from './lib/availability.ts';
+import type { SyncedCalendarInfo } from './server/calendarSync.ts';
 
 const LOCAL_STORAGE_KEY = 'dispolive_user_state_v2';
 const STUDIO_TOKEN_KEY = 'dispolive_studio_token_v1';
@@ -95,6 +97,8 @@ export default function App() {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasEnvCalendar, setHasEnvCalendar] = useState(false);
+  const [envCalendars, setEnvCalendars] = useState<SyncedCalendarInfo[]>([]);
+  const [calendarsSummary, setCalendarsSummary] = useState<CalendarSummaryItem[]>([]);
   const [upcomingSlots, setUpcomingSlots] = useState<AnonymizedSlot[]>([]);
   const [now, setNow] = useState(new Date());
   const [timezone, setTimezone] = useState<string>(DEFAULT_SCHEDULE.timezone || 'Europe/Paris');
@@ -173,6 +177,12 @@ export default function App() {
         if (data.hasEnvCalendar !== undefined) {
           setHasEnvCalendar(data.hasEnvCalendar);
         }
+        if (Array.isArray(data.envCalendars)) {
+          setEnvCalendars(data.envCalendars);
+        }
+        if (Array.isArray(data.calendars)) {
+          setCalendarsSummary(data.calendars);
+        }
         if (data.timezone) {
           setTimezone(data.timezone);
         }
@@ -183,14 +193,26 @@ export default function App() {
     }
   }, [timezone]);
 
-  // Initial check & interval polling every 10 seconds
+  // Initial check, interval polling every 10 seconds, and immediate refresh when tab wakes up
   useEffect(() => {
     fetchServerStatus();
-    const timer = setInterval(() => {
+    const syncNow = () => {
       setNow(new Date());
       fetchServerStatus();
-    }, 10000);
-    return () => clearInterval(timer);
+    };
+    const timer = setInterval(syncNow, 10000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncNow();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', syncNow);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', syncNow);
+    };
   }, [fetchServerStatus]);
 
   // Persist icsUrl to localStorage
@@ -242,6 +264,28 @@ export default function App() {
       setIsSyncing(false);
     }
   };
+
+  const handleRefreshBadgeGenerator = useCallback(
+    async (forceCalendarSync = false) => {
+      setNow(new Date());
+      if (forceCalendarSync) {
+        try {
+          const res = await fetch('/api/calendar-refresh', {
+            method: 'POST',
+            headers: studioToken ? { Authorization: `Bearer ${studioToken}` } : {},
+          });
+          if (res.status === 401 && passwordRequired) {
+            setIsStudioAuthenticated(false);
+            return;
+          }
+        } catch {
+          // Ignore calendar refresh network errors and still refresh status
+        }
+      }
+      await fetchServerStatus();
+    },
+    [fetchServerStatus, passwordRequired, studioToken]
+  );
 
   const isStudioRoute = currentTab !== 'public';
   const studioLocked = authLoading || (passwordRequired && !isStudioAuthenticated);
@@ -304,8 +348,10 @@ export default function App() {
               <SignatureStudio
                 availability={availability}
                 profile={profile}
+                timezone={timezone}
                 appBaseUrl={appBaseUrl}
                 onGoToSimulator={() => setCurrentTab('simulator')}
+                onRefreshLive={handleRefreshBadgeGenerator}
               />
             )}
 
@@ -315,6 +361,7 @@ export default function App() {
                 profile={profile}
                 timezone={timezone}
                 upcomingSlots={upcomingSlots}
+                calendars={calendarsSummary}
                 appBaseUrl={appBaseUrl}
                 onGoToStudio={() => setCurrentTab('signature')}
               />
@@ -328,6 +375,7 @@ export default function App() {
                 onSyncIcs={handleSyncIcs}
                 isSyncing={isSyncing}
                 hasEnvCalendar={hasEnvCalendar}
+                envCalendars={envCalendars}
                 onRefreshEnvCalendar={handleRefreshEnvCalendar}
               />
             )}

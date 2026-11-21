@@ -134,7 +134,113 @@ Un onglet dédié **Simulateur** (ou accessible via `?view=simulator`) permet de
 - **Sélecteur de date et heure** avec curseur interactif 24h.
 - **Raccourcis en 1 clic** (Matinée de travail, Pause déjeuner, Soirée/Nuit, Week-end, Lundi matin, Maintenant).
 - **Prévisualisation instantanée des 4 variantes** (Pill, Signature Complète, Carte Compacte, Point Minimaliste) avec bascule thème clair / sombre.
-- **Support API `?time=ISO_DATE`** : permet de générer des badges PNG ou SVG pour un instant T spécifique via `/api/badge.png?time=...` ou `/api/badge.svg?time=...`.
+- **Support API `?time=ISO_DATE`** : permet de générer des badges PNG, SVG ou JSON pour un instant T spécifique.
+
+---
+
+## 🌐 Routes API Badges (SVG, PNG & JSON)
+
+Toutes les routes publiques de badges sont accessibles sans authentification, avec CORS activé (`Access-Control-Allow-Origin: *`) et des en-têtes anti-cache stricts (`Cache-Control: no-cache, no-store, must-revalidate, max-age=0`) pour garantir une donnée fraîche à chaque appel.
+
+### 1. Routes disponibles & formats de sortie
+
+| Route (et alias court) | Content-Type | Sortie produite | Usage conseillé |
+| :--- | :--- | :--- | :--- |
+| `GET /api/badge.svg` (`/badge.svg`) | `image/svg+xml; charset=utf-8` | Badge vectoriel SVG animé (halo pulsant) | Web, Notion, GitHub, Gmail web, Apple Mail |
+| `GET /api/badge.png` (`/badge.png`) | `image/png` | Image PNG anti-aliasée **1,5× (Retina)** avec police `Plus Jakarta Sans` | Signatures e-mail universelles (**Outlook Desktop** inclus) |
+| `GET /api/badge.json` (`/badge.json`) | `application/json; charset=utf-8` | Objet JSON structuré (statut, lignes de texte, compteurs, couleurs) | Scripts, widgets, Raccourcis Apple, Home Assistant, Raycast |
+
+> Vous pouvez également appeler `GET /api/badge?format=png|svg|json`. La route `GET /api/status` renvoie en complément la liste anonymisée des prochains créneaux occupés (`upcomingSlots`) et l'état de synchronisation des agendas (`envCalendars`).
+
+### 2. Options (paramètres d'URL)
+
+| Paramètre | Routes concernées | Valeurs possibles | Défaut | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `style` | SVG, PNG | `pill`, `card`, `signature`, `dot` | `pill` | Choisit la variante visuelle (voir dimensions ci-dessous) |
+| `theme` | SVG, PNG | `light`, `dark` | `light` | Palette claire (fond blanc) ou sombre (fond `#0f172a`) |
+| `time` | SVG, PNG, JSON | Date ISO 8601 (ex. `2026-11-23T10:00:00%2B04:00`) | *Maintenant* | Évalue et rend le statut à une date/heure précise (simulation) |
+| `name` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge le nom affiché sur le badge / dans le JSON |
+| `role` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge le poste / spécialité |
+| `company` | SVG, PNG, JSON | Texte libre *(max 120 car. en JSON)* | `config/personal.json` | Surcharge l'entreprise / établissement |
+| `format` | `/api/badge` | `png`, `svg`, `json` | `png` | Force le format de sortie lorsque l'extension n'est pas dans l'URL |
+| `v` | SVG, PNG | Chaîne libre (ex. `v=17321000`) | — | Cache-buster optionnel côté client / e-mail |
+
+#### Dimensions & comportement adaptatif des styles (SVG / PNG) :
+- **`pill`** : `400 × 54 px` sur 2 lignes, passe automatiquement à `400 × 70 px` sur 3 lignes dès qu'au moins 1 RDV est prévu aujourd'hui.
+- **`card`** : `380 × 100 px` sur 2 lignes, ou `380 × 118 px` sur 3 lignes avec les RDV du jour.
+- **`signature`** : `480 × 114 px` (avatar initiales + nom + poste + encart 2 lignes), ou `480 × 132 px` sur 3 lignes.
+- **`dot`** : `36 × 36 px` seul si aucun RDV ce jour, ou `42–46 × 38 px` avec pastille compteur (`1` à `99+`) dès qu'un RDV est prévu aujourd'hui.
+
+#### Exemples d'appels :
+```text
+/api/badge.png?style=signature&theme=dark
+/api/badge.svg?style=card&theme=light&time=2026-11-23T10:00:00%2B04:00
+/api/badge.json
+/api/badge.json?time=2026-11-23T10:00:00%2B04:00
+```
+
+### 3. Sortie de la route JSON (`/api/badge.json`)
+
+La route JSON fournit exactement les mêmes informations textuelles et compteurs que les badges graphiques, **sans jamais exposer les titres privés des rendez-vous ni les URL `.ics`** :
+
+```json
+{
+  "status": "BUSY",
+  "state": "busy",
+  "isWorkTime": true,
+  "title": "En réunion / Occupé (Pro)",
+  "subtitle": "Reprise mercredi à 08h30",
+  "appointmentsLabel": "1 RDV (journée entière) aujourd'hui",
+  "activeCalendarLabel": "Pro",
+  "lines": [
+    "En réunion / Occupé (Pro)",
+    "Reprise mercredi à 08h30",
+    "1 RDV (journée entière) aujourd'hui"
+  ],
+  "text": "En réunion / Occupé (Pro) — Reprise mercredi à 08h30 • 1 RDV (journée entière) aujourd'hui",
+  "todayAppointmentsCount": 1,
+  "todayAllDayAppointmentsCount": 1,
+  "calendars": [
+    {
+      "id": "pro",
+      "label": "Pro",
+      "todayAppointmentsCount": 1,
+      "todayAllDayAppointmentsCount": 1,
+      "isBusyNow": true
+    }
+  ],
+  "nextFreeTime": "mercredi à 08h30",
+  "nextChangeAt": "2026-11-25T04:30:00.000Z",
+  "colors": {
+    "badge": "#EF4444",
+    "dot": "#DC2626"
+  },
+  "profile": {
+    "name": "Prénom Nom",
+    "role": "Votre Poste / Spécialité",
+    "company": "Votre Entreprise / Établissement"
+  },
+  "timezone": "Indian/Reunion",
+  "localTime": "10h00",
+  "localDate": "2026-11-23",
+  "updatedAt": "2026-11-23T06:00:00.000Z"
+}
+```
+
+Détail des principaux champs JSON :
+- **`status`** : état détaillé (`AVAILABLE`, `BUSY`, `LUNCH`, `OFF_HOURS`, `OVERRIDE_*`).
+- **`state`** : état simplifié (`available`, `busy`, `away`, `off`).
+- **`isWorkTime`** : `true` si l'heure courante est dans les horaires travaillés ou occupée par une réunion.
+- **`title`** / **`subtitle`** : lignes 1 et 2 du badge.
+- **`appointmentsLabel`** : libellé de la 3e ligne (`1 RDV prévu aujourd'hui`, `X RDV prévus aujourd'hui`, `X RDV (journée entière) aujourd'hui`, `X RDV (dont journée entière) aujourd'hui`) ou `null` s'il y a `0` RDV aujourd'hui.
+- **`activeCalendarLabel`** : label du/des agendas qui rendent actuellement indisponible (`null` si disponible ou hors horaires).
+- **`lines`** : tableau de 2 chaînes (si `0` RDV ce jour) ou 3 chaînes (sinon), prêt à afficher ligne par ligne.
+- **`text`** : version texte concaténée sur une seule ligne.
+- **`todayAppointmentsCount`** / **`todayAllDayAppointmentsCount`** : total des RDV bloquants sur la journée locale (`00h00` → `24h00`) et nombre de RDV couvrant toute la journée / journée de travail.
+- **`calendars`** *(si au moins un agenda est configuré)* : synthèse anonymisée par calendrier (`id`, `label`, `todayAppointmentsCount`, `todayAllDayAppointmentsCount`, `isBusyNow`).
+- **`nextFreeTime`** / **`nextChangeAt`** : libellé lisible et horodatage ISO UTC du prochain changement d'état.
+- **`colors`** : codes hexadécimaux `badge` et `dot` correspondant à l'état courant.
+- **`profile`**, **`timezone`**, **`localTime`**, **`localDate`**, **`updatedAt`** : identité publique et repères temporels calculés dans le fuseau actif.
 
 ---
 
@@ -150,7 +256,13 @@ Sur la page publique, la section **Prochains créneaux occupés** présente les 
 ## 🔐 Variables d'environnement (`.env`) & Accès au Studio (`STUDIO_PASSWORD`)
 
 Définissez vos variables dans `.env` en local (ou dans les **Environment Variables** de Vercel) :
-- **`CALENDAR_ICS_URL`** : URL secrète iCal (`.ics`) de votre agenda (jamais exposée côté client).
+- **`CALENDAR_ICS_URL`** : URL secrète iCal (`.ics`) de votre agenda principal (jamais exposée côté client).
+- **Multi-agendas avec label (`CALENDAR_ICS_URL_<LABEL>`)** : ajoutez autant de calendriers que souhaité directement via le nom des variables d'environnement, par exemple :
+  - `CALENDAR_ICS_URL_PRO="https://..."` → label **`Pro`**
+  - `CALENDAR_ICS_URL_PERSO="https://..."` → label **`Perso`**
+  - `CALENDAR_ICS_URL_CABINET_SUD="https://..."` → label **`Cabinet Sud`**
+  - *(Optionnel)* Surchargez le libellé exact (accents, sigles) via `CALENDAR_ICS_LABEL_<LABEL>` (ex. `CALENDAR_ICS_LABEL_PRO="Cabinet Médical"`) ou `CALENDAR_ICS_LABEL` pour `CALENDAR_ICS_URL`.
+  - Les labels apparaissent sur les créneaux occupés, le statut en réunion et le flux `/api/badge.json` sans jamais révéler les titres privés ni les URL `.ics`.
 - **`TIMEZONE`** : Fuseau horaire IANA utilisé pour calculer votre heure locale (ex. `Europe/Paris`, `Indian/Reunion`).
 - **`STUDIO_PASSWORD`** : Mot de passe pour masquer et protéger l'accès au Studio (générateur de signature, simulateur, horaires & guide) :
   - Les visiteurs de la page publique et les images de signature (`/api/badge.png`, `/api/badge.svg`) restent accessibles sans mot de passe.

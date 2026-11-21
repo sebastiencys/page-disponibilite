@@ -17,6 +17,16 @@ import {
   type DayOfWeek,
 } from '../lib/availability.ts';
 
+interface EnvCalendarDisplay {
+  id: string;
+  label: string;
+  envVar: string;
+  eventCount: number;
+  fromCache: boolean;
+  lastSync: string | null;
+  ok: boolean;
+}
+
 interface CalendarScheduleProps {
   schedule: ScheduleConfig;
   icsUrl: string;
@@ -24,6 +34,7 @@ interface CalendarScheduleProps {
   onSyncIcs: (url: string) => Promise<void>;
   isSyncing: boolean;
   hasEnvCalendar: boolean;
+  envCalendars?: EnvCalendarDisplay[];
   onRefreshEnvCalendar: () => Promise<void>;
 }
 
@@ -44,6 +55,7 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
   onSyncIcs,
   isSyncing,
   hasEnvCalendar,
+  envCalendars = [],
   onRefreshEnvCalendar,
 }) => {
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
@@ -226,16 +238,52 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                   <div>
                     <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
-                      Lien d'agenda 100% protégé via CALENDAR_ICS_URL
+                      {envCalendars.length > 1
+                        ? `${envCalendars.length} agendas protégés via variables d'environnement`
+                        : "Lien d'agenda 100% protégé côté serveur"}
                     </div>
                     <p className="text-xs text-emerald-800 dark:text-emerald-300 mt-1 leading-relaxed">
-                      L'adresse secrète de votre calendrier est stockée dans la variable d'environnement du serveur. 
-                      Elle est <strong>totalement invisible</strong> aux yeux du public et de vos correspondants.
+                      Les adresses secrètes restent dans votre <code className="font-mono">.env</code> (ou Vercel) et sont <strong>totalement invisibles</strong> côté navigateur.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-emerald-200 dark:border-emerald-800/60">
+                {envCalendars.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    {envCalendars.map(cal => (
+                      <div
+                        key={cal.envVar}
+                        className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-emerald-200/80 dark:border-emerald-800/60"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              cal.ok ? 'bg-emerald-500' : 'bg-amber-500'
+                            }`}
+                          />
+                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                            {cal.label}
+                          </span>
+                          <code className="text-[10px] font-mono bg-emerald-100/80 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded">
+                            {cal.envVar}
+                          </code>
+                        </div>
+                        <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                          {cal.ok ? `${cal.eventCount} événements` : 'Erreur de synchro'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="text-[11px] text-emerald-800/90 dark:text-emerald-300/90 bg-emerald-100/60 dark:bg-emerald-900/30 rounded-lg px-3 py-2">
+                  Astuce multi-agenda : ajoutez des variables suffixées comme{' '}
+                  <code className="font-mono font-semibold">CALENDAR_ICS_URL_PRO</code> ou{' '}
+                  <code className="font-mono font-semibold">CALENDAR_ICS_URL_PERSO</code> (et en option{' '}
+                  <code className="font-mono font-semibold">CALENDAR_ICS_LABEL_PRO</code>) dans <code className="font-mono">.env</code>.
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-emerald-200 dark:border-emerald-800/60">
                   <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
                     Synchronisation automatique active en arrière-plan
                   </span>
@@ -257,7 +305,7 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                   Recommandation sécurité (variable d'environnement) :
                 </div>
                 <p className="text-indigo-900 dark:text-indigo-200 text-xs leading-relaxed">
-                  Pour ne pas exposer votre lien de calendrier, définissez <code className="bg-indigo-100 dark:bg-indigo-900/80 px-1 py-0.5 rounded font-mono font-bold text-indigo-950 dark:text-indigo-100">CALENDAR_ICS_URL="votre_lien_secret"</code> dans votre fichier <code>.env</code> ou dans les variables d'environnement de <strong>Vercel</strong>. Le serveur s'en occupera automatiquement en arrière-plan sans jamais révéler l'URL au navigateur.
+                  Pour ne pas exposer vos liens de calendrier, définissez <code className="bg-indigo-100 dark:bg-indigo-900/80 px-1 py-0.5 rounded font-mono font-bold text-indigo-950 dark:text-indigo-100">CALENDAR_ICS_URL="votre_lien_secret"</code> ou plusieurs agendas nommés (<code className="bg-indigo-100 dark:bg-indigo-900/80 px-1 py-0.5 rounded font-mono font-bold">CALENDAR_ICS_URL_PRO</code>, <code className="bg-indigo-100 dark:bg-indigo-900/80 px-1 py-0.5 rounded font-mono font-bold">CALENDAR_ICS_URL_PERSO</code>) dans <code>.env</code> ou sur <strong>Vercel</strong>.
                 </p>
               </div>
             )}

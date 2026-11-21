@@ -10,6 +10,7 @@ import {
   getAnonymizedUpcomingSlots,
   getEffectiveLunchBreak,
   getTodayAppointmentsCount,
+  getCalendarSummaries,
   formatTimeShort,
   type CalendarEvent,
   type ScheduleConfig,
@@ -583,6 +584,73 @@ test('todayAllDayAppointmentsCount detects timed events covering the full workin
   const availSingleFull = calculateAvailability(monday, TEST_SCHEDULE, [events[0]], undefined, tz);
   assert.equal(availSingleFull.todayAppointmentsCount, 1);
   assert.equal(availSingleFull.todayAllDayAppointmentsCount, 1);
+});
+
+test('multi-calendar labels propagate to BUSY title, anonymized slots, and per-calendar summaries', () => {
+  const tz = 'Europe/Paris';
+  const nowMorning = parisDate('2026-11-09T10:15:00');
+  const events: CalendarEvent[] = [
+    {
+      id: 'pro:1',
+      title: 'Confidentiel Patient',
+      start: parisDate('2026-11-09T10:00:00').toISOString(),
+      end: parisDate('2026-11-09T11:00:00').toISOString(),
+      isBusy: true,
+      calendarId: 'pro',
+      calendarLabel: 'Pro',
+    },
+    {
+      id: 'perso:1',
+      title: 'Médecin famille',
+      start: parisDate('2026-11-09T10:30:00').toISOString(),
+      end: parisDate('2026-11-09T11:30:00').toISOString(),
+      isBusy: true,
+      calendarId: 'perso',
+      calendarLabel: 'Perso',
+    },
+    {
+      id: 'perso:2',
+      title: 'Sport',
+      start: parisDate('2026-11-09T18:30:00').toISOString(),
+      end: parisDate('2026-11-09T19:30:00').toISOString(),
+      isBusy: true,
+      calendarId: 'perso',
+      calendarLabel: 'Perso',
+    },
+  ];
+
+  // At 10:15 only "Pro" is active
+  const availPro = calculateAvailability(nowMorning, TEST_SCHEDULE, events, undefined, tz);
+  assert.equal(availPro.status, 'BUSY');
+  assert.equal(availPro.activeCalendarLabel, 'Pro');
+  assert.equal(availPro.title, 'En réunion / Occupé (Pro)');
+  assert.equal(availPro.todayAppointmentsCount, 3);
+
+  // At 10:45 both "Pro" and "Perso" overlap
+  const nowOverlap = parisDate('2026-11-09T10:45:00');
+  const availBoth = calculateAvailability(nowOverlap, TEST_SCHEDULE, events, undefined, tz);
+  assert.equal(availBoth.activeCalendarLabel, 'Pro • Perso');
+  assert.equal(availBoth.title, 'En réunion / Occupé (Pro • Perso)');
+
+  // upcomingSlots merges overlapping slots and preserves both labels without leaking titles
+  const slots = getAnonymizedUpcomingSlots(events, nowMorning, 8, TEST_SCHEDULE, tz);
+  assert.equal(slots.length, 2);
+  assert.equal(slots[0].calendarLabel, 'Pro • Perso');
+  assert.deepEqual(slots[0].calendarLabels, ['Pro', 'Perso']);
+  assert.equal(slots[1].calendarLabel, 'Perso');
+  assert.ok(!JSON.stringify(slots).includes('Confidentiel Patient'));
+
+  // Per-calendar summaries at 10:15
+  const summaries = getCalendarSummaries(nowMorning, events, TEST_SCHEDULE, tz, [
+    { id: 'pro', label: 'Pro' },
+    { id: 'perso', label: 'Perso' },
+    { id: 'vide', label: 'Vide' },
+  ]);
+  assert.deepEqual(summaries, [
+    { id: 'pro', label: 'Pro', todayAppointmentsCount: 1, todayAllDayAppointmentsCount: 0, isBusyNow: true },
+    { id: 'perso', label: 'Perso', todayAppointmentsCount: 2, todayAllDayAppointmentsCount: 0, isBusyNow: false },
+    { id: 'vide', label: 'Vide', todayAppointmentsCount: 0, todayAllDayAppointmentsCount: 0, isBusyNow: false },
+  ]);
 });
 
 

@@ -77,7 +77,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
     const groups: {
       dateKey: string;
       dayLabel: string;
-      slots: { startStr: string; endStr: string; durationStr: string }[];
+      slots: { startStr: string; endStr: string; durationStr: string; calendarLabel?: string }[];
     }[] = [];
 
     for (const slot of upcomingSlots) {
@@ -119,7 +119,12 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         group = { dateKey, dayLabel, slots: [] };
         groups.push(group);
       }
-      group.slots.push({ startStr, endStr, durationStr });
+      group.slots.push({
+        startStr,
+        endStr,
+        durationStr,
+        calendarLabel: slot.calendarLabel,
+      });
     }
 
     return groups;
@@ -238,8 +243,13 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                           <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-100">
                             {slot.startStr} - {slot.endStr}
                           </span>
-                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                            Créneau réservé
+                          <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span>Créneau réservé</span>
+                            {slot.calendarLabel && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70 font-semibold text-[10px]">
+                                {slot.calendarLabel}
+                              </span>
+                            )}
                           </span>
                         </div>
                       </div>

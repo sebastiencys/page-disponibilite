@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Copy,
   Check,
@@ -22,9 +22,21 @@ import {
   Lock,
   FileCode,
   UserCheck,
+  Clock,
 } from 'lucide-react';
-import { type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
+import { type AvailabilityResult, DEFAULT_PROFILE, DEFAULT_SCHEDULE } from '../lib/availability.ts';
 import type { BadgeStyle, BadgeTheme } from '../lib/badgeRenderer.ts';
+import {
+  AUTO_REFRESH_OPTIONS,
+  AUTO_REFRESH_STORAGE_KEY,
+  buildAvailabilityFingerprint,
+  buildBadgePreviewUrl,
+  buildBadgePublicUrl,
+  formatLastRefreshedTime,
+  formatRemainingRefreshTime,
+  normalizeAutoRefreshMs,
+  shouldTriggerAutoRefresh,
+} from '../lib/badgeRefresh.ts';
 
 interface SignatureStudioProps {
   availability: AvailabilityResult;
@@ -35,24 +47,110 @@ interface SignatureStudioProps {
     email: string;
     bookingUrl: string;
   };
+  timezone?: string;
   onUpdateProfile?: (field: string, value: string) => void;
   appBaseUrl: string;
   onGoToSimulator?: () => void;
+  onRefreshLive?: (forceCalendarSync?: boolean) => Promise<void>;
 }
 
 export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   availability,
   profile,
+  timezone = DEFAULT_SCHEDULE.timezone || 'Europe/Paris',
   onUpdateProfile,
   appBaseUrl,
   onGoToSimulator,
+  onRefreshLive,
 }) => {
   const [badgeStyle, setBadgeStyle] = useState<BadgeStyle>('pill');
   const [badgeTheme, setBadgeTheme] = useState<BadgeTheme>('light');
   const [format, setFormat] = useState<'png' | 'svg'>('png');
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [emailClientTab, setEmailClientTab] = useState<'gmail' | 'outlook' | 'apple'>('gmail');
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState<number>(() => Date.now());
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number>(() => Date.now());
+  const [clockNow, setClockNow] = useState<number>(() => Date.now());
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [autoRefreshMs, setAutoRefreshMs] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return normalizeAutoRefreshMs(localStorage.getItem(AUTO_REFRESH_STORAGE_KEY));
+    }
+    return normalizeAutoRefreshMs(undefined);
+  });
+
+  // Persist auto-refresh preference (default: 10 minutes)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, String(autoRefreshMs));
+    }
+  }, [autoRefreshMs]);
+
+  const triggerBadgeRefresh = useCallback(
+    async (forceCalendarSync = false) => {
+      setIsRefreshing(true);
+      try {
+        if (onRefreshLive) {
+          await onRefreshLive(forceCalendarSync);
+        }
+      } finally {
+        const nowTs = Date.now();
+        setRefreshKey(prev => (nowTs > prev ? nowTs : prev + 1));
+        setLastRefreshedAt(nowTs);
+        setClockNow(nowTs);
+        setIsRefreshing(false);
+      }
+    },
+    [onRefreshLive]
+  );
+
+  // Immediately refresh badge images whenever server availability status/text/RDV counts change
+  const availabilityFingerprint = useMemo(
+    () => buildAvailabilityFingerprint(availability),
+    [availability]
+  );
+  const prevFingerprintRef = useRef<string>(availabilityFingerprint);
+  useEffect(() => {
+    if (prevFingerprintRef.current !== availabilityFingerprint) {
+      prevFingerprintRef.current = availabilityFingerprint;
+      const nowTs = Date.now();
+      setRefreshKey(prev => (nowTs > prev ? nowTs : prev + 1));
+      setLastRefreshedAt(nowTs);
+      setClockNow(nowTs);
+    }
+  }, [availabilityFingerprint]);
+
+  // Periodic wall-clock auto-refresh check (default: every 10 minutes, plus tab wake-up catch-up)
+  const lastRefreshedAtRef = useRef<number>(lastRefreshedAt);
+  lastRefreshedAtRef.current = lastRefreshedAt;
+  const isRefreshingRef = useRef<boolean>(isRefreshing);
+  isRefreshingRef.current = isRefreshing;
+
+  useEffect(() => {
+    const checkAndRefresh = () => {
+      const nowTs = Date.now();
+      setClockNow(nowTs);
+      if (
+        !isRefreshingRef.current &&
+        shouldTriggerAutoRefresh(lastRefreshedAtRef.current, nowTs, autoRefreshMs)
+      ) {
+        triggerBadgeRefresh(true);
+      }
+    };
+
+    const tick = setInterval(checkAndRefresh, 15000);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndRefresh();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [autoRefreshMs, triggerBadgeRefresh]);
 
   // When user switches to Outlook, default to PNG because Outlook Desktop Word engine doesn't render SVG
   const handleSelectClient = (client: 'gmail' | 'outlook' | 'apple') => {
@@ -62,8 +160,27 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     }
   };
 
-  // Build the live direct badge URL with all profile parameters
-  const badgeUrl = `${appBaseUrl}/api/badge.${format}?style=${badgeStyle}&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`;
+  // Canonical clean URL (for copying / HTML / Markdown) vs cache-busted preview URL
+  const badgeUrl = buildBadgePublicUrl(appBaseUrl, {
+    format,
+    style: badgeStyle,
+    theme: badgeTheme,
+    name: profile.name,
+    role: profile.role,
+    company: profile.company,
+  });
+  const previewBadgeUrl = buildBadgePreviewUrl(
+    appBaseUrl,
+    {
+      format,
+      style: badgeStyle,
+      theme: badgeTheme,
+      name: profile.name,
+      role: profile.role,
+      company: profile.company,
+    },
+    refreshKey
+  );
   const badgeJsonUrl = `${appBaseUrl}/api/badge.json`;
   const publicPageUrl = `${appBaseUrl}?view=public`;
 
@@ -228,19 +345,54 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
         <div className="lg:col-span-5 space-y-6">
           {/* Badge Options */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <Palette className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                Style & Format du Badge
-              </h2>
-              <button
-                onClick={() => setRefreshKey(k => k + 1)}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex items-center gap-1 font-medium cursor-pointer"
-                title="Rafraîchir le rendu"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Actualiser
-              </button>
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  Style & Format du Badge
+                </h2>
+                <div className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor="studio-autorefresh-select">
+                    Fréquence d&apos;actualisation automatique
+                  </label>
+                  <div className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1">
+                    <Clock className="w-3 h-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                    <select
+                      id="studio-autorefresh-select"
+                      aria-label="Fréquence d'actualisation automatique"
+                      value={autoRefreshMs}
+                      onChange={e => setAutoRefreshMs(normalizeAutoRefreshMs(e.target.value))}
+                      className="bg-transparent text-[11px] font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer"
+                    >
+                      {AUTO_REFRESH_OPTIONS.map(opt => (
+                        <option key={opt.ms} value={opt.ms} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                          {opt.ms === 0 ? 'Auto : Off' : `Auto : ${opt.label}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => triggerBadgeRefresh(true)}
+                    disabled={isRefreshing}
+                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 disabled:opacity-50 flex items-center gap-1 font-medium cursor-pointer px-2 py-1 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
+                    title="Forcer la synchronisation du calendrier et rafraîchir le rendu"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    Actualiser
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <span>
+                  Aperçu synchronisé à <strong className="font-mono text-slate-700 dark:text-slate-200">{formatLastRefreshedTime(lastRefreshedAt, timezone)}</strong>
+                </span>
+                <span>
+                  {autoRefreshMs > 0
+                    ? `Prochaine vérif. auto dans ${formatRemainingRefreshTime(lastRefreshedAt, clockNow, autoRefreshMs)}`
+                    : 'Actualisation périodique désactivée'}
+                </span>
+              </div>
             </div>
 
             {/* Badge Style Selector */}
@@ -647,7 +799,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       <div className="my-1 block">
                         <img
                           key={`signature-${format}-${refreshKey}`}
-                          src={badgeUrl}
+                          src={previewBadgeUrl}
                           alt="Signature complète et statut en direct"
                           className="max-w-full rounded-xl shadow-xs transition-transform hover:scale-[1.01]"
                         />
@@ -669,7 +821,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       }`}>
                         <img
                           key={`dot-${format}-${refreshKey}`}
-                          src={badgeUrl}
+                          src={previewBadgeUrl}
                           alt="Point de disponibilité"
                           className="h-9 w-auto shrink-0"
                         />
@@ -694,7 +846,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       <div className="my-1 inline-block">
                         <img
                           key={`card-${format}-${refreshKey}`}
-                          src={badgeUrl}
+                          src={previewBadgeUrl}
                           alt="Carte compacte de disponibilité"
                           className="max-w-full rounded-xl shadow-xs transition-transform hover:scale-[1.01]"
                         />
@@ -715,7 +867,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       <div className="my-1 inline-block">
                         <img
                           key={`pill-${format}-${refreshKey}`}
-                          src={badgeUrl}
+                          src={previewBadgeUrl}
                           alt="Capsule pill de disponibilité"
                           className="max-w-full rounded-full shadow-xs transition-transform hover:scale-[1.01]"
                         />
@@ -1023,7 +1175,18 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=pill&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
+                src={buildBadgePreviewUrl(
+                  appBaseUrl,
+                  {
+                    format,
+                    style: 'pill',
+                    theme: badgeTheme,
+                    name: profile.name,
+                    role: profile.role,
+                    company: profile.company,
+                  },
+                  refreshKey
+                )}
                 alt="Aperçu Pill Moderne"
                 className="max-w-full rounded-full shadow-2xs"
               />
@@ -1061,7 +1224,18 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=signature&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
+                src={buildBadgePreviewUrl(
+                  appBaseUrl,
+                  {
+                    format,
+                    style: 'signature',
+                    theme: badgeTheme,
+                    name: profile.name,
+                    role: profile.role,
+                    company: profile.company,
+                  },
+                  refreshKey
+                )}
                 alt="Aperçu Signature Complète"
                 className="max-w-full rounded-xl shadow-2xs"
               />
@@ -1099,7 +1273,18 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=card&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
+                src={buildBadgePreviewUrl(
+                  appBaseUrl,
+                  {
+                    format,
+                    style: 'card',
+                    theme: badgeTheme,
+                    name: profile.name,
+                    role: profile.role,
+                    company: profile.company,
+                  },
+                  refreshKey
+                )}
                 alt="Aperçu Carte Compacte"
                 className="max-w-full rounded-xl shadow-2xs"
               />
@@ -1137,7 +1322,18 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               badgeTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white dark:bg-slate-100 border-slate-200 dark:border-slate-700'
             }`}>
               <img
-                src={`${appBaseUrl}/api/badge.${format}?style=dot&theme=${badgeTheme}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}&v=${refreshKey}`}
+                src={buildBadgePreviewUrl(
+                  appBaseUrl,
+                  {
+                    format,
+                    style: 'dot',
+                    theme: badgeTheme,
+                    name: profile.name,
+                    role: profile.role,
+                    company: profile.company,
+                  },
+                  refreshKey
+                )}
                 alt="Aperçu Point Minimaliste"
                 className="h-9 w-auto shadow-2xs"
               />

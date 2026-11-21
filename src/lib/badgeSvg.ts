@@ -5,6 +5,7 @@
 
 import {
   type AvailabilityResult,
+  type CalendarSummaryItem,
   DEFAULT_PROFILE,
   formatTimeShort,
   getZonedDateParts,
@@ -29,6 +30,7 @@ export interface BadgeTextOptions {
   company?: string;
   timezone?: string;
   now?: Date;
+  calendars?: CalendarSummaryItem[];
 }
 
 export interface BadgeTextPayload {
@@ -38,10 +40,12 @@ export interface BadgeTextPayload {
   title: string;
   subtitle: string;
   appointmentsLabel: string | null;
+  activeCalendarLabel: string | null;
   lines: string[];
   text: string;
   todayAppointmentsCount: number;
   todayAllDayAppointmentsCount: number;
+  calendars?: CalendarSummaryItem[];
   nextFreeTime: string | null;
   nextChangeAt: string | null;
   colors: {
@@ -124,10 +128,12 @@ export function buildBadgeTextPayload(
     title: avail.title,
     subtitle: avail.subtitle,
     appointmentsLabel,
+    activeCalendarLabel: avail.activeCalendarLabel ?? null,
     lines,
     text,
     todayAppointmentsCount,
     todayAllDayAppointmentsCount,
+    ...(options.calendars && options.calendars.length > 0 ? { calendars: options.calendars } : {}),
     nextFreeTime: avail.nextFreeTime ?? null,
     nextChangeAt: avail.nextChangeDate ? avail.nextChangeDate.toISOString() : null,
     colors: {
