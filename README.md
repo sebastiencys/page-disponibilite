@@ -50,7 +50,7 @@ Vos informations affichées sur la page publique et dans la signature e-mail (en
 ```
 
 - **`email`** / **`bookingUrl`** : Optionnels. Définissez à `null` ou `""` pour masquer automatiquement les boutons *Prendre rendez-vous* / *Envoyer un e-mail*.
-- **`mode`** *(optionnel, défaut `"person"`)* : Adapte automatiquement les libellés entre `"person"` (**Repos** / *Hors horaires de travail* / *Horaires habituels de travail*) et `"shop"` (**Fermé** / *Horaires d'ouverture*). Peut être surchargé via `PROFILE_MODE` ou `?mode=shop|person`.
+- **`mode`** *(optionnel, défaut `"person"`)* : Adapte automatiquement les libellés entre `"person"` (**Disponible** / **Repos** / *Hors horaires de travail* / *Horaires habituels de travail*) et `"shop"` (**Ouvert** / **Fermé** / *Horaires d'ouverture*). Peut être surchargé via `PROFILE_MODE` ou `?mode=shop|person`.
 
 > 💡 **Alternative 100 % `.env` (multi-dépôts / Vercel)** : Vous pouvez tout regrouper dans **une seule variable** `PERSONAL_JSON='{"name":...}'` et `SCHEDULE_JSON='{"timezone":...}'` dans `.env` ou sur Vercel — le Studio intègre un **convertisseur JSON → `.env`** dans les onglets *Signature* et *Agenda & Horaires* pour compresser vos JSON et les copier en 1 clic. Les variables unitaires **`PROFILE_*`** et **`SCHEDULE_*`** *(horaires globaux, jours travaillés, surcharges par jour `_MON`/`_LUN`/`_1`, pauses, fermetures)* restent aussi supportées et sont prioritaires sur les JSON.
 
@@ -166,7 +166,7 @@ Toutes les routes publiques de badges sont accessibles sans authentification, av
 | `style` | SVG, PNG | `pill`, `card`, `signature`, `dot` | `pill` | Choisit la variante visuelle (voir dimensions ci-dessous) |
 | `theme` | SVG, PNG | `light`, `dark`, `transparent`, `transparent-dark` | `light` | Palette claire (fond blanc), sombre (`#0f172a`), transparente texte foncé (`transparent`) ou transparente texte clair (`transparent-dark` pour signatures/sites en mode sombre) |
 | `lang` | SVG, PNG, JSON, `/api/status` | `fr`, `en` | `fr` | Langue des libellés et du format horaire (`09h00` en `fr`, `09:00` en `en`) |
-| `mode` | SVG, PNG, JSON, `/api/status` | `person`, `shop` | `config/personal.json` | Bascule la sémantique *Personne* (*Hors horaires*, *Repos*) vs *Boutique* (*Fermé*, *Horaires d'ouverture*) |
+| `mode` | SVG, PNG, JSON, `/api/status` | `person`, `shop` | `config/personal.json` | Bascule la sémantique *Personne* (*Disponible*, *Hors horaires*, *Repos*) vs *Boutique* (*Ouvert*, *Fermé*, *Horaires d'ouverture*) |
 | `time` | SVG, PNG, JSON, `/api/status` | Date ISO 8601 (ex. `2026-11-23T10:00:00%2B04:00`) | *Maintenant* | Évalue et rend le statut à une date/heure précise (simulation) |
 | `name` | SVG, PNG, JSON | Texte libre *(max 120 car.)* | `config/personal.json` | Surcharge le nom affiché sur le badge / dans le JSON |
 | `role` | SVG, PNG, JSON | Texte libre *(max 120 car.)* | `config/personal.json` | Surcharge le poste / spécialité |

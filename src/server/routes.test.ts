@@ -315,6 +315,7 @@ test('/api/status and /api/badge.svg dynamically honor PROFILE_* and SCHEDULE_JS
     assert.equal(json.profile.mode, 'shop');
     assert.equal(json.timezone, 'Europe/Paris');
     assert.equal(json.availability.status, 'AVAILABLE');
+    assert.equal(json.availability.title, 'Ouvert');
     assert.equal(json.schedule.days[0].enabled, true);
 
     const svgReq = createMockReqRes('GET', '/api/badge.svg?style=signature&time=2026-11-08T10:00:00%2B01:00');
@@ -322,6 +323,13 @@ test('/api/status and /api/badge.svg dynamically honor PROFILE_* and SCHEDULE_JS
     const svgRes = await svgReq.done;
     assert.equal(svgRes.statusCode, 200);
     assert.ok(svgRes.text.includes('Pharmacie du Centre'));
+    assert.ok(svgRes.text.includes('Ouvert'));
+
+    const svgEnReq = createMockReqRes('GET', '/api/badge.svg?lang=en&time=2026-11-08T10:00:00%2B01:00');
+    await handleApiRequest(svgEnReq.req, svgEnReq.res);
+    const svgEnRes = await svgEnReq.done;
+    assert.equal(svgEnRes.statusCode, 200);
+    assert.ok(svgEnRes.text.includes('Open'));
   } finally {
     for (const [k, v] of Object.entries(prevEnv)) {
       if (v === undefined) delete process.env[k];

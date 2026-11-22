@@ -36,6 +36,13 @@ export function sanitizeOptionalContactField(value: unknown): string {
   return trimmed;
 }
 
+export function getAvailableLabel(mode: ProfileMode = 'person', lang: AppLang = 'fr'): string {
+  if (mode === 'shop') {
+    return lang === 'en' ? 'Open' : 'Ouvert';
+  }
+  return lang === 'en' ? 'Available' : 'Disponible';
+}
+
 export function getOffDayLabel(mode: ProfileMode = 'person', lang: AppLang = 'fr'): string {
   if (mode === 'shop') {
     return lang === 'en' ? 'Closed' : 'Fermé';
@@ -1308,6 +1315,7 @@ export function calculateAvailability(
   const isEn = normalizeAppLang(lang, 'fr') === 'en';
   const resolvedLang: AppLang = isEn ? 'en' : 'fr';
   const resolvedMode: ProfileMode = normalizeProfileMode(mode, 'person');
+  const availableTitle = getAvailableLabel(resolvedMode, resolvedLang);
   const offHoursTitle =
     resolvedMode === 'shop'
       ? isEn
@@ -1356,9 +1364,13 @@ export function calculateAvailability(
             state: 'available',
             badgeColor: '#10B981',
             dotColor: '#059669',
-            title: override.note || (isEn ? 'Available' : 'Disponible'),
+            title: override.note || availableTitle,
             subtitle: override.expiresAt
               ? `${isEn ? 'Until' : "Jusqu'à"} ${formatTimeShort(new Date(override.expiresAt), timeZone, resolvedLang)}`
+              : resolvedMode === 'shop'
+              ? isEn
+                ? 'Open override'
+                : 'Mode ouvert forcé'
               : isEn
               ? 'Available override'
               : 'Mode disponible forcé',
@@ -1637,7 +1649,7 @@ export function calculateAvailability(
     state: 'available',
     badgeColor: '#10B981',
     dotColor: '#059669',
-    title: isEn ? 'Available' : 'Disponible',
+    title: availableTitle,
     subtitle: availableUntilText,
     isWorkTime: true,
     nextFreeTime: isEn ? 'Now' : 'Maintenant',

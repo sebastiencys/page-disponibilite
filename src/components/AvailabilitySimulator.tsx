@@ -402,7 +402,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             </div>
           </div>
 
-          {/* Mode, Theme & Language Selectors */}
+          {/* Mode & Language Selectors */}
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button
@@ -451,55 +451,6 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
                 }`}
               >
                 EN
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setTheme('light')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  theme === 'light'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <Sun className="w-3.5 h-3.5 text-amber-500" />
-                <span>Clair</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTheme('dark')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  theme === 'dark'
-                    ? 'bg-slate-900 dark:bg-slate-950 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Sombre</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTheme('transparent')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  theme === 'transparent'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-200 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Transparent</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTheme('transparent-dark')}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                  theme === 'transparent-dark'
-                    ? 'bg-slate-900 text-indigo-200 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                }`}
-              >
-                <span>Transp. nuit</span>
               </button>
             </div>
           </div>
@@ -708,7 +659,9 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
                 ? `${getOffDayLabel(simMode, 'fr')} — ${activeClosure.label || (activeClosure.type === 'vacation' ? 'Congés' : 'Jour férié')}`
                 : daySchedule?.enabled
                 ? `${daySchedule.start} - ${daySchedule.end}`
-                : `${getOffDayLabel(simMode, 'fr')} (${simMode === 'shop' ? 'Fermé' : 'Jour non travaillé'})`}
+                : simMode === 'shop'
+                ? getOffDayLabel('shop', 'fr')
+                : `${getOffDayLabel('person', 'fr')} (Jour non travaillé)`}
             </span>
           </div>
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">
@@ -722,7 +675,9 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             </span>
           </div>
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">
-            <span className="text-slate-400 dark:text-slate-400 block font-medium">3. Heures de bureau actives ?</span>
+            <span className="text-slate-400 dark:text-slate-400 block font-medium">
+              {simMode === 'shop' ? '3. Boutique ouverte ?' : '3. Heures de bureau actives ?'}
+            </span>
             <span className={`font-semibold ${simulatedAvailability.isWorkTime ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
               {simulatedAvailability.isWorkTime ? '✓ Oui (Période active)' : '✗ Non (En dehors des horaires)'}
             </span>
@@ -732,7 +687,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
 
       {/* The 4 Badge Variants Presentation */}
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight">
               Aperçu des 4 variantes de badge prévues
@@ -741,15 +696,61 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
               Tous les rendus sont calculés en temps réel avec vos polices officielles Plus Jakarta Sans.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
-            <span>
-              Thème sélectionné : <strong className="text-indigo-600 dark:text-indigo-400 capitalize">{theme}</strong>
-            </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-1 bg-slate-200/75 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  theme === 'light'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5 text-amber-500" />
+                <span>Clair</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-slate-900 dark:bg-slate-950 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Sombre</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('transparent')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  theme === 'transparent'
+                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-200 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>Transparent</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('transparent-dark')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  theme === 'transparent-dark'
+                    ? 'bg-slate-900 text-indigo-200 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <span>Transp. nuit</span>
+              </button>
+            </div>
+
             <a
               href={getSimulatedJsonUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300 rounded-lg border border-slate-200/80 dark:border-slate-700 transition-colors"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-200 hover:text-indigo-700 dark:hover:text-indigo-300 rounded-xl border border-slate-200/80 dark:border-slate-700 transition-colors shadow-2xs"
               title="Tester la sortie texte JSON simulée via l'API"
             >
               <span>Tester en JSON</span>

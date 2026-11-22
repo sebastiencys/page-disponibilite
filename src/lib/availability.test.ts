@@ -16,6 +16,7 @@ import {
   formatTimeShort,
   normalizeProfileMode,
   sanitizeOptionalContactField,
+  getAvailableLabel,
   getOffDayLabel,
   getScheduleHeadingLabel,
   resolveProfileFromEnv,
@@ -880,6 +881,11 @@ test('supports profile mode (person vs shop), optional contact sanitization, and
   assert.equal(normalizeProfileMode('personne'), 'person');
   assert.equal(normalizeProfileMode('unknown', 'shop'), 'shop');
 
+  assert.equal(getAvailableLabel('person', 'fr'), 'Disponible');
+  assert.equal(getAvailableLabel('person', 'en'), 'Available');
+  assert.equal(getAvailableLabel('shop', 'fr'), 'Ouvert');
+  assert.equal(getAvailableLabel('shop', 'en'), 'Open');
+
   assert.equal(getOffDayLabel('person', 'fr'), 'Repos');
   assert.equal(getOffDayLabel('person', 'en'), 'Off');
   assert.equal(getOffDayLabel('shop', 'fr'), 'Fermé');
@@ -899,6 +905,12 @@ test('supports profile mode (person vs shop), optional contact sanitization, and
 
   const mondayLunchEn = getEffectiveLunchBreak(TEST_SCHEDULE, 1, 'en');
   assert.equal(mondayLunchEn.label, 'Lunch break');
+
+  const mondayOpen = parisDate('2026-11-09T10:15:00');
+  assert.equal(calculateAvailability(mondayOpen, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'fr', 'person').title, 'Disponible');
+  assert.equal(calculateAvailability(mondayOpen, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'en', 'person').title, 'Available');
+  assert.equal(calculateAvailability(mondayOpen, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'fr', 'shop').title, 'Ouvert');
+  assert.equal(calculateAvailability(mondayOpen, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'en', 'shop').title, 'Open');
 
   const sunday = parisDate('2026-11-08T14:00:00');
   assert.equal(calculateAvailability(sunday, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'fr', 'person').title, 'Hors horaires de travail');
