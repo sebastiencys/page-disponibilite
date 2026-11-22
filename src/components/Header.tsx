@@ -1,6 +1,7 @@
 import React from 'react';
 import { Radio, Calendar, Sparkles, HelpCircle, ArrowLeft, Clock, Sliders, Lock, Sun, Moon, AlertTriangle } from 'lucide-react';
 import { type AppLang, type AvailabilityResult, DEFAULT_PROFILE } from '../lib/availability.ts';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 
 interface HeaderProps {
   currentTab: string;
@@ -112,13 +113,21 @@ export const Header: React.FC<HeaderProps> = ({
                   />
                 </span>
                 <span
-                  className="text-xs font-semibold"
-                  style={{ color: availability.badgeColor }}
+                  className={`text-xs font-semibold ${
+                    availability.state === 'available'
+                      ? 'text-emerald-700 dark:text-emerald-300'
+                      : availability.state === 'busy'
+                      ? 'text-red-700 dark:text-red-300'
+                      : availability.state === 'away'
+                      ? 'text-amber-700 dark:text-amber-300'
+                      : 'text-slate-700 dark:text-slate-200'
+                  }`}
                 >
                   {availability.title}
                 </span>
               </div>
 
+              <PWAInstallButton lang={lang} />
               {renderThemeToggle()}
 
               {/* Only show Studio shortcut in public header if already authenticated */}
@@ -181,8 +190,15 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               </span>
               <span
-                className="text-xs font-semibold"
-                style={{ color: availability.badgeColor }}
+                className={`text-xs font-semibold ${
+                  availability.state === 'available'
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : availability.state === 'busy'
+                    ? 'text-red-700 dark:text-red-300'
+                    : availability.state === 'away'
+                    ? 'text-amber-700 dark:text-amber-300'
+                    : 'text-slate-700 dark:text-slate-200'
+                }`}
               >
                 {availability.title}
               </span>
@@ -200,6 +216,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
+            <PWAInstallButton lang="fr" />
             {renderThemeToggle()}
 
             <button

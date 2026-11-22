@@ -12,6 +12,7 @@ import { PublicStatusPage } from './components/PublicStatusPage.tsx';
 import { EmailGuideModal } from './components/EmailGuideModal.tsx';
 import { AvailabilitySimulator } from './components/AvailabilitySimulator.tsx';
 import { StudioAuthGate } from './components/StudioAuthGate.tsx';
+import { OfflineIndicator } from './components/OfflineIndicator.tsx';
 import {
   calculateAvailability,
   DEFAULT_SCHEDULE,
@@ -150,6 +151,16 @@ export default function App() {
       publicLang
     );
   });
+
+  // Dynamic SVG favicon reflecting live availability color
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const link = document.getElementById('dispolive-favicon') as HTMLLinkElement | null;
+    if (!link) return;
+    const dot = availability.dotColor || '#10B981';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#0f172a"/><circle cx="32" cy="32" r="21" fill="${dot}" fill-opacity="0.22"/><circle cx="32" cy="32" r="14" fill="${dot}" stroke="#ffffff" stroke-width="2.5"/></svg>`;
+    link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  }, [availability.dotColor]);
 
   // Base URL
   const appBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
@@ -430,6 +441,7 @@ export default function App() {
             {currentTab === 'schedule' && (
               <CalendarSchedule
                 schedule={DEFAULT_SCHEDULE}
+                profileMode={profile.mode}
                 icsUrl={icsUrl}
                 onUpdateIcsUrl={setIcsUrl}
                 onSyncIcs={handleSyncIcs}
@@ -444,6 +456,8 @@ export default function App() {
           </>
         )}
       </main>
+
+      <OfflineIndicator lang={headerLang} />
     </div>
   );
 }

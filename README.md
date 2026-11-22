@@ -44,9 +44,13 @@ Vos informations affichées sur la page publique et dans la signature e-mail (en
   "role": "Votre Poste / Spécialité",
   "company": "Votre Entreprise / Établissement",
   "email": "prenom.nom@example.com",
-  "bookingUrl": "https://calendly.com"
+  "bookingUrl": "https://calendly.com",
+  "mode": "person"
 }
 ```
+
+- **`email`** / **`bookingUrl`** : Optionnels. Définissez à `null` ou `""` pour masquer automatiquement les boutons *Prendre rendez-vous* / *Envoyer un e-mail*.
+- **`mode`** *(optionnel, défaut `"person"`)* : Choisit le libellé des jours désactivés entre `"person"` (**Repos** / *Off*) et `"shop"` (**Fermé** / *Closed*). Peut être surchargé via `PROFILE_MODE`.
 
 ### 2. Horaires & Pauses Déjeuner (`config/schedule.json`)
 
@@ -141,7 +145,7 @@ Un onglet dédié **Simulateur** (ou accessible via `?view=simulator`) permet de
 
 ## 🌐 Routes API Badges (SVG, PNG & JSON)
 
-Toutes les routes publiques de badges sont accessibles sans authentification, avec CORS activé (`Access-Control-Allow-Origin: *`) et des en-têtes anti-cache stricts (`Cache-Control: no-cache, no-store, must-revalidate, max-age=0`) pour garantir une donnée fraîche à chaque appel. Les endpoints JSON (`/api/badge.json` et `/api/status`) exposent en plus un **`ETag`** sémantique compatible `If-None-Match` (`304 Not Modified`).
+Toutes les routes publiques de badges sont accessibles sans authentification, avec CORS activé (`Access-Control-Allow-Origin: *`) et des en-têtes anti-cache stricts (`Cache-Control: no-cache, no-store, must-revalidate, max-age=0`) pour garantir une donnée fraîche à chaque appel. Tous les endpoints (`/api/badge.svg`, `/api/badge.png`, `/api/badge.json`, `/api/status`) exposent en plus un **`ETag`** sémantique compatible `If-None-Match` (`304 Not Modified`).
 
 ### 1. Routes disponibles & formats de sortie
 
@@ -151,7 +155,7 @@ Toutes les routes publiques de badges sont accessibles sans authentification, av
 | `GET /api/badge.png` (`/badge.png`) | `image/png` | Image PNG anti-aliasée **1,5× (Retina)** avec police `Plus Jakarta Sans` | Signatures e-mail universelles (**Outlook Desktop** inclus) |
 | `GET /api/badge.json` (`/badge.json`) | `application/json; charset=utf-8` | Objet JSON structuré (statut, lignes de texte, compteurs, couleurs) | Scripts, widgets, Raccourcis Apple, Home Assistant, Raycast |
 
-> Vous pouvez également appeler `GET /api/badge?format=png|svg|json`. La route `GET /api/status` renvoie en complément la liste anonymisée des prochains créneaux occupés (`upcomingSlots`) et l'état de synchronisation des agendas (`envCalendars`). Pour la supervision, `GET /api/health` retourne un état de santé anonymisé (`ok`, `calendarsCount`, `timezone`), et `POST /api/calendar-refresh` (ou `GET /api/status?refresh=1` authentifié Studio) force une resynchronisation immédiate des flux `.ics`.
+> Vous pouvez également appeler `GET /api/badge?format=png|svg|json`. La route `GET /api/status` renvoie en complément la liste anonymisée des prochains créneaux occupés (`upcomingSlots`). Pour la supervision, `GET /api/health` retourne un état de santé anonymisé (`ok`, `calendarsCount`, `allCalendarsHealthy`, `timezone`) — le détail `calendars` et `POST /api/calendar-refresh` nécessitent une session Studio authentifiée lorsque `STUDIO_PASSWORD` est configuré. L'application embarque aussi un **favicon dynamique** reflétant la couleur du statut et le support **PWA** installable (manifeste Web & mode hors ligne).
 
 ### 2. Options (paramètres d'URL)
 
@@ -269,3 +273,4 @@ Définissez vos variables dans `.env` en local (ou dans les **Environment Variab
 - **`STUDIO_PASSWORD`** : Mot de passe pour masquer et protéger l'accès au Studio (générateur de signature, simulateur, horaires & guide) :
   - Les visiteurs de la page publique et les images de signature (`/api/badge.png`, `/api/badge.svg`) restent accessibles sans mot de passe.
   - L'accès au Studio via `/studio`, `?view=studio` ou le lien discret en pied de page demande le mot de passe configuré avant d'afficher l'interface d'administration.
+- **`PROFILE_MODE`** *(optionnel)* : Surcharge la propriété `"mode"` de `config/personal.json` (`"person"` par défaut pour *Repos / Off*, ou `"shop"` pour *Fermé / Closed*).

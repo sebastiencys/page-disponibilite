@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import {
   normalizeAppLang,
+  sanitizeOptionalContactField,
   type AppLang,
   type AvailabilityResult,
   DEFAULT_PROFILE,
@@ -120,6 +121,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   onRefreshLive,
 }) => {
   const initialPrefs = useMemo(() => loadStudioPrefs(), []);
+  const safeProfileEmail = sanitizeOptionalContactField(profile.email);
+  const safeProfileBookingUrl = sanitizeOptionalContactField(profile.bookingUrl);
   const [badgeStyle, setBadgeStyle] = useState<BadgeStyle>(initialPrefs.badgeStyle);
   const [badgeTheme, setBadgeTheme] = useState<BadgeTheme>(initialPrefs.badgeTheme);
   const [badgeLang, setBadgeLang] = useState<AppLang>(initialPrefs.badgeLang);
@@ -283,7 +286,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
     const safeName = escapeHtml(rawName);
     const safeRole = escapeHtml(rawRole);
     const safeCompany = escapeHtml(rawCompany);
-    const safeBookingUrl = profile.bookingUrl ? escapeHtml(profile.bookingUrl) : '';
+    const safeBookingUrl = safeProfileBookingUrl ? escapeHtml(safeProfileBookingUrl) : '';
     const safePublicUrl = escapeHtml(publicPageUrl);
 
     const badgeSrc = buildBadgePublicUrl(appBaseUrl, {
@@ -736,7 +739,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Adresse e-mail</label>
                 <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm font-mono text-slate-700 dark:text-slate-200 select-all flex items-center justify-between">
-                  <span className="truncate">{profile.email || '—'}</span>
+                  <span className="truncate">{safeProfileEmail || '—'}</span>
                   <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 </div>
               </div>
@@ -746,14 +749,14 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   Lien de prise de rendez-vous
                 </label>
                 <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-700 dark:text-slate-200 select-all flex items-center justify-between">
-                  {profile.bookingUrl ? (
+                  {safeProfileBookingUrl ? (
                     <a
-                      href={profile.bookingUrl}
+                      href={safeProfileBookingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 truncate underline flex items-center gap-1.5"
                     >
-                      <span className="truncate">{profile.bookingUrl}</span>
+                      <span className="truncate">{safeProfileBookingUrl}</span>
                       <ExternalLink className="w-3.5 h-3.5 shrink-0" />
                     </a>
                   ) : (
@@ -1019,7 +1022,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     </div>
                   )}
 
-                  {profile.bookingUrl && (
+                  {safeProfileBookingUrl && (
                     <div className={`mt-3 text-xs font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-indigo-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
                       {badgeLang === 'en' ? '📅 Book a meeting directly' : '📅 Prendre rendez-vous directement'}
                     </div>

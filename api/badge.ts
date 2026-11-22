@@ -113,6 +113,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).send(JSON.stringify(payload, null, 2));
   }
 
+  if (format === 'svg' || format === 'png') {
+    const etag = computeSemanticWeakEtag({
+      format,
+      style,
+      theme,
+      lang,
+      name: safeName,
+      role: safeRole,
+      company: safeCompany,
+      status: avail.status,
+      state: avail.state,
+      isWorkTime: avail.isWorkTime,
+      title: avail.title,
+      subtitle: avail.subtitle,
+      badgeColor: avail.badgeColor,
+      dotColor: avail.dotColor,
+      todayAppointmentsCount: avail.todayAppointmentsCount ?? 0,
+      todayAllDayAppointmentsCount: avail.todayAllDayAppointmentsCount ?? 0,
+    });
+    res.setHeader(
+      'Content-Type',
+      format === 'svg' ? 'image/svg+xml; charset=utf-8' : 'image/png'
+    );
+    res.setHeader('ETag', etag);
+    if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
+      return res.status(304).end();
+    }
+  }
+
   if (format === 'svg') {
     const svg = renderBadgeSvg(avail, {
       style,
@@ -122,7 +151,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       company: safeCompany,
       lang,
     });
-    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
     return res.status(200).send(svg);
   }
 
@@ -136,7 +164,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     company: safeCompany,
     lang,
   });
-  res.setHeader('Content-Type', 'image/png');
   res.setHeader('Content-Length', png.length);
   return res.status(200).send(png);
 }

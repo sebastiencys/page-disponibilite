@@ -6,6 +6,8 @@ import {
   formatTimeShort,
   getZonedDateParts,
   normalizeAppLang,
+  normalizeProfileMode,
+  sanitizeOptionalContactField,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type CalendarEvent,
@@ -71,8 +73,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       name: DEFAULT_PROFILE.name,
       role: DEFAULT_PROFILE.role,
       company: DEFAULT_PROFILE.company,
-      email: DEFAULT_PROFILE.email,
-      bookingUrl: DEFAULT_PROFILE.bookingUrl,
+      email: sanitizeOptionalContactField(DEFAULT_PROFILE.email),
+      bookingUrl: sanitizeOptionalContactField(DEFAULT_PROFILE.bookingUrl),
+      mode: normalizeProfileMode(process.env.PROFILE_MODE ?? DEFAULT_PROFILE.mode, 'person'),
     },
   };
   const zonedNow = getZonedDateParts(now, timezone);

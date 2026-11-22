@@ -5,6 +5,7 @@
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday, ...
 export type AppLang = 'fr' | 'en';
+export type ProfileMode = 'person' | 'shop';
 
 export function normalizeAppLang(value: unknown, fallback: AppLang = 'fr'): AppLang {
   if (typeof value === 'string') {
@@ -13,6 +14,33 @@ export function normalizeAppLang(value: unknown, fallback: AppLang = 'fr'): AppL
     if (clean === 'fr' || clean.startsWith('fr-') || clean.startsWith('fr_')) return 'fr';
   }
   return fallback;
+}
+
+export function normalizeProfileMode(value: unknown, fallback: ProfileMode = 'person'): ProfileMode {
+  if (typeof value === 'string') {
+    const clean = value.trim().toLowerCase();
+    if (clean === 'shop' || clean === 'boutique' || clean === 'store' || clean === 'commerce' || clean === 'business') {
+      return 'shop';
+    }
+    if (clean === 'person' || clean === 'personne' || clean === 'individual' || clean === 'perso') {
+      return 'person';
+    }
+  }
+  return fallback;
+}
+
+export function sanitizeOptionalContactField(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed || /^(null|none|undefined)$/i.test(trimmed)) return '';
+  return trimmed;
+}
+
+export function getOffDayLabel(mode: ProfileMode = 'person', lang: AppLang = 'fr'): string {
+  if (mode === 'shop') {
+    return lang === 'en' ? 'Closed' : 'Fermé';
+  }
+  return lang === 'en' ? 'Off' : 'Repos';
 }
 
 export interface DaySchedule {
@@ -74,9 +102,18 @@ export interface UserProfile {
   company: string;
   email: string;
   bookingUrl: string;
+  mode?: ProfileMode;
 }
 
-export const DEFAULT_PROFILE: UserProfile = personalJson as unknown as UserProfile;
+const rawPersonal = (personalJson || {}) as Record<string, unknown>;
+export const DEFAULT_PROFILE: UserProfile = {
+  name: sanitizeOptionalContactField(rawPersonal.name) || 'DispoLive',
+  role: sanitizeOptionalContactField(rawPersonal.role),
+  company: sanitizeOptionalContactField(rawPersonal.company),
+  email: sanitizeOptionalContactField(rawPersonal.email),
+  bookingUrl: sanitizeOptionalContactField(rawPersonal.bookingUrl),
+  mode: normalizeProfileMode(rawPersonal.mode, 'person'),
+};
 
 export type AvailabilityStatus =
   | 'AVAILABLE'
@@ -155,10 +192,13 @@ export interface EffectiveLunchBreak {
  */
 export function getEffectiveLunchBreak(
   schedule: ScheduleConfig,
-  dayOfWeek: DayOfWeek
+  dayOfWeek: DayOfWeek,
+  lang: AppLang = 'fr'
 ): EffectiveLunchBreak {
   const globalBreak = schedule.lunchBreak;
-  const defaultLabel = globalBreak.label?.trim() || 'Pause déjeuner';
+  const rawGlobalLabel = globalBreak.label?.trim() || 'Pause déjeuner';
+  const defaultLabel =
+    lang === 'en' && rawGlobalLabel.toLowerCase() === 'pause déjeuner' ? 'Lunch break' : rawGlobalLabel;
   const dayOverride = globalBreak.days?.[dayOfWeek];
 
   if (!dayOverride) {
@@ -173,7 +213,11 @@ export function getEffectiveLunchBreak(
 
   const customStart = dayOverride.start?.trim();
   const customEnd = dayOverride.end?.trim();
-  const customLabel = dayOverride.label?.trim();
+  const customLabelRaw = dayOverride.label?.trim();
+  const customLabel =
+    customLabelRaw && lang === 'en' && customLabelRaw.toLowerCase() === 'pause déjeuner'
+      ? 'Lunch break'
+      : customLabelRaw;
   const hasCustomTime = Boolean(customStart || customEnd);
 
   const start = customStart || globalBreak.start;
@@ -873,14 +917,14 @@ export function calculateAvailability(
   }
 
   // 4. Check lunch break (day-specific override takes priority over global lunchBreak)
-  const effectiveLunch = getEffectiveLunchBreak(schedule, currentDay);
+  const effectiveLunch = getEffectiveLunchBreak(schedule, currentDay, resolvedLang);
   if (effectiveLunch.enabled) {
     const lunchStart = parseTimeToMinutes(effectiveLunch.start);
     const lunchEnd = parseTimeToMinutes(effectiveLunch.end);
     if (currentMinutes >= lunchStart && currentMinutes < lunchEnd) {
       const lunchEndDate = new Date(now);
       const lunchTitle =
-        isEn && effectiveLunch.label === 'Pause déjeuner' ? 'Lunch break' : effectiveLunch.label;
+        isEn && effectiveLunch.label.toLowerCase() === 'pause déjeuner' ? 'Lunch break' : effectiveLunch.label;
       return {
         status: 'LUNCH',
         state: 'away',

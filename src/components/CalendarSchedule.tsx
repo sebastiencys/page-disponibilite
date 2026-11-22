@@ -15,6 +15,8 @@ import {
 import {
   getEffectiveLunchBreak,
   formatTimeShort,
+  getOffDayLabel,
+  type ProfileMode,
   type ScheduleConfig,
   type DayOfWeek,
 } from '../lib/availability.ts';
@@ -31,6 +33,7 @@ interface EnvCalendarDisplay {
 
 interface CalendarScheduleProps {
   schedule: ScheduleConfig;
+  profileMode?: ProfileMode;
   icsUrl: string;
   onUpdateIcsUrl: (url: string) => void;
   onSyncIcs: (url: string) => Promise<void>;
@@ -52,6 +55,7 @@ const DAYS_META: { key: DayOfWeek; label: string }[] = [
 
 export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
   schedule,
+  profileMode = 'person',
   icsUrl,
   onUpdateIcsUrl,
   onSyncIcs,
@@ -138,7 +142,9 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                         {dayConf.start.replace(':', 'h')} - {dayConf.end.replace(':', 'h')}
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-400 dark:text-slate-500 font-medium italic">Repos</span>
+                      <span className="text-xs text-slate-400 dark:text-slate-500 font-medium italic">
+                        {getOffDayLabel(profileMode, 'fr')}
+                      </span>
                     )}
                   </div>
                 );

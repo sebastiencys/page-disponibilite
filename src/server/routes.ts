@@ -12,8 +12,11 @@ import {
   formatTimeShort,
   getZonedDateParts,
   normalizeAppLang,
+  normalizeProfileMode,
+  sanitizeOptionalContactField,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
+  type ProfileMode,
   type ScheduleConfig,
   type CalendarEvent,
   type ManualOverride,
@@ -57,6 +60,7 @@ export interface UserState {
   company: string;
   email: string;
   bookingUrl: string;
+  mode: ProfileMode;
   schedule: ScheduleConfig;
   events: CalendarEvent[];
   override: ManualOverride;
@@ -70,6 +74,7 @@ export const globalStore: UserState = {
   company: DEFAULT_PROFILE.company,
   email: DEFAULT_PROFILE.email,
   bookingUrl: DEFAULT_PROFILE.bookingUrl,
+  mode: DEFAULT_PROFILE.mode ?? 'person',
   schedule: DEFAULT_SCHEDULE,
   override: { type: 'auto' },
   events: [],
@@ -253,11 +258,17 @@ export async function handleApiRequest(
     return true;
   }
 
-  // Calendar info endpoint (tells the client if CALENDAR_ICS_URL* are set in env without leaking URLs)
+  // Calendar info endpoint (Studio-protected when STUDIO_PASSWORD is set)
   if (pathname === '/api/calendar-info') {
+    if (!isRequestStudioAuthenticated(req.headers)) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ error: 'Authentification Studio requise' }));
+      return true;
+    }
     const { events, calendars } = await resolveCurrentCalendarState();
     res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.end(
       JSON.stringify({
         hasEnvCalendar: hasEnvCalendar(),
@@ -296,7 +307,7 @@ export async function handleApiRequest(
 
   const serverTimezone = process.env.TIMEZONE || globalStore.schedule.timezone || 'Europe/Paris';
 
-  // Healthcheck / ICS warm-up endpoint (anonymized)
+  // Healthcheck / ICS warm-up endpoint (detailed source metadata restricted to authenticated Studio sessions)
   if (pathname === '/api/health') {
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -305,7 +316,9 @@ export async function handleApiRequest(
       res.end();
       return true;
     }
+    const studioAuthed = isRequestStudioAuthenticated(req.headers);
     const { calendars } = await resolveCurrentCalendarState();
+    const allCalendarsHealthy = calendars.every(c => c.ok);
     res.end(
       JSON.stringify({
         ok: true,
@@ -314,7 +327,8 @@ export async function handleApiRequest(
         timezone: serverTimezone,
         hasEnvCalendar: hasEnvCalendar(),
         calendarsCount: calendars.length,
-        calendars,
+        allCalendarsHealthy,
+        ...(studioAuthed ? { calendars } : {}),
       })
     );
     return true;
@@ -355,16 +369,22 @@ export async function handleApiRequest(
       badgeLang
     );
 
-    const svg = renderBadgeSvg(avail, {
+    const badgeOptions = {
       style: badgeStyle,
       theme: badgeTheme,
       name: badgeName,
       role: badgeRole,
       company: badgeCompany,
       lang: badgeLang,
-    });
+    };
+    const etag = buildBadgeImageEtag('svg', avail, badgeOptions);
+    if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
+      serveNotModified(res, etag, 'image/svg+xml; charset=utf-8');
+      return true;
+    }
 
-    serveSvg(res, svg);
+    const svg = renderBadgeSvg(avail, badgeOptions);
+    serveSvg(res, svg, false, etag);
     return true;
   }
 
@@ -445,17 +465,24 @@ export async function handleApiRequest(
       badgeLang
     );
 
-    await ensureFontsLoaded();
-    const png = renderBadgePng(avail, {
+    const badgeOptions = {
       style: badgeStyle,
       theme: badgeTheme,
       name: badgeName,
       role: badgeRole,
       company: badgeCompany,
       lang: badgeLang,
-    });
+    };
+    const etag = buildBadgeImageEtag('png', avail, badgeOptions);
+    if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
+      serveNotModified(res, etag, 'image/png');
+      return true;
+    }
 
-    servePng(res, png);
+    await ensureFontsLoaded();
+    const png = renderBadgePng(avail, badgeOptions);
+
+    servePng(res, png, false, etag);
     return true;
   }
 
@@ -504,6 +531,11 @@ export async function handleApiRequest(
       syncedCalendars.map(c => ({ id: c.id, label: c.label }))
     );
 
+    const resolvedProfileMode = normalizeProfileMode(
+      process.env.PROFILE_MODE ?? globalStore.mode ?? DEFAULT_PROFILE.mode,
+      'person'
+    );
+
     const statusPayload = {
       now: now.toISOString(),
       timezone: serverTimezone,
@@ -517,8 +549,9 @@ export async function handleApiRequest(
         name: globalStore.name,
         role: globalStore.role,
         company: globalStore.company,
-        email: globalStore.email,
-        bookingUrl: globalStore.bookingUrl,
+        email: sanitizeOptionalContactField(globalStore.email),
+        bookingUrl: sanitizeOptionalContactField(globalStore.bookingUrl),
+        mode: resolvedProfileMode,
       },
     };
     const zonedNow = getZonedDateParts(now, serverTimezone);
@@ -621,17 +654,62 @@ export async function handleApiRequest(
   return false;
 }
 
-function serveSvg(res: ServerResponse, svgContent: string, headOnly = false) {
+function buildBadgeImageEtag(
+  format: 'svg' | 'png',
+  avail: ReturnType<typeof calculateAvailability>,
+  options: {
+    style: BadgeStyle;
+    theme: BadgeTheme;
+    name: string;
+    role: string;
+    company: string;
+    lang: string;
+  }
+): string {
+  return computeSemanticWeakEtag({
+    format,
+    style: options.style,
+    theme: options.theme,
+    lang: options.lang,
+    name: options.name,
+    role: options.role,
+    company: options.company,
+    status: avail.status,
+    state: avail.state,
+    isWorkTime: avail.isWorkTime,
+    title: avail.title,
+    subtitle: avail.subtitle,
+    badgeColor: avail.badgeColor,
+    dotColor: avail.dotColor,
+    todayAppointmentsCount: avail.todayAppointmentsCount ?? 0,
+    todayAllDayAppointmentsCount: avail.todayAllDayAppointmentsCount ?? 0,
+  });
+}
+
+function serveNotModified(res: ServerResponse, etag: string, contentType: string) {
+  res.statusCode = 304;
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('ETag', etag);
+  res.end();
+}
+
+function serveSvg(res: ServerResponse, svgContent: string, headOnly = false, etag?: string) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
   // Email clients aggressive cache prevention
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  if (etag) {
+    res.setHeader('ETag', etag);
+  }
   res.end(headOnly ? undefined : svgContent);
 }
 
-function servePng(res: ServerResponse, pngBuffer: Buffer, headOnly = false) {
+function servePng(res: ServerResponse, pngBuffer: Buffer, headOnly = false, etag?: string) {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'image/png');
   if (!headOnly) {
@@ -641,6 +719,9 @@ function servePng(res: ServerResponse, pngBuffer: Buffer, headOnly = false) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  if (etag) {
+    res.setHeader('ETag', etag);
+  }
   res.end(headOnly ? undefined : pngBuffer);
 }
 

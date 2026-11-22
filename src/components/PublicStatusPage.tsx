@@ -22,7 +22,10 @@ import {
   getEffectiveLunchBreak,
   getUpcomingClosures,
   formatTimeShort,
+  getOffDayLabel,
+  sanitizeOptionalContactField,
   type AppLang,
+  type ProfileMode,
   type AvailabilityResult,
   type ScheduleConfig,
   type DayOfWeek,
@@ -41,6 +44,7 @@ interface PublicStatusPageProps {
     company: string;
     email: string;
     bookingUrl: string;
+    mode?: ProfileMode;
   };
   availability: AvailabilityResult;
   schedule: ScheduleConfig;
@@ -86,12 +90,14 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   now = new Date(),
   onGoToStudio,
 }) => {
-  const [copiedStatus, setCopiedStatus] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
 
   const isEn = lang === 'en';
   const dayLabels = DAY_LABELS_BY_LANG[lang];
+  const contactEmail = sanitizeOptionalContactField(profile.email);
+  const bookingHref = sanitizeOptionalContactField(profile.bookingUrl);
+  const offDayLabel = getOffDayLabel(profile.mode, lang);
 
   const todayRdvLabel = formatTodayAppointmentsLabel(
     availability.todayAppointmentsCount ?? 0,
@@ -111,16 +117,6 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   const getPublicShareUrl = () => {
     if (typeof window === 'undefined') return '';
     return `${window.location.origin}/?view=public${isEn ? '&lang=en' : ''}`;
-  };
-
-  const handleCopyStatus = async () => {
-    const parts = [`${profile.name} — ${availability.title} (${availability.subtitle})`];
-    if (todayRdvLabel) {
-      parts.push(todayRdvLabel);
-    }
-    await copyTextToClipboard(parts.join(' • '));
-    setCopiedStatus(true);
-    setTimeout(() => setCopiedStatus(false), 2000);
   };
 
   const handleCopyLink = async () => {
@@ -315,7 +311,17 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             className="w-3 h-3 rounded-full animate-pulse"
             style={{ backgroundColor: availability.dotColor }}
           />
-          <span className="text-base font-bold" style={{ color: availability.badgeColor }}>
+          <span
+            className={`text-base font-bold ${
+              availability.state === 'available'
+                ? 'text-emerald-700 dark:text-emerald-300'
+                : availability.state === 'busy'
+                ? 'text-red-700 dark:text-red-300'
+                : availability.state === 'away'
+                ? 'text-amber-700 dark:text-amber-300'
+                : 'text-slate-700 dark:text-slate-200'
+            }`}
+          >
             {availability.title}
           </span>
           <span className="text-sm text-slate-600 dark:text-slate-300 font-medium">
@@ -373,9 +379,9 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
 
         {/* Action Buttons */}
         <div className="mt-8 flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3">
-          {profile.bookingUrl && (
+          {bookingHref && (
             <a
-              href={profile.bookingUrl}
+              href={bookingHref}
               target="_blank"
               rel="noreferrer"
               className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all whitespace-nowrap"
@@ -385,34 +391,15 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
             </a>
           )}
 
-          {profile.email && (
+          {contactEmail && (
             <a
-              href={`mailto:${profile.email}`}
+              href={`mailto:${contactEmail}`}
               className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all whitespace-nowrap"
             >
               <Mail className="w-4 h-4" />
               {isEn ? 'Send email' : 'Envoyer un e-mail'}
             </a>
           )}
-
-          <button
-            type="button"
-            onClick={handleCopyStatus}
-            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
-            title={isEn ? 'Copy current availability status as text' : 'Copier le statut actuel en texte'}
-          >
-            {copiedStatus ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-500" />
-                <span>{isEn ? 'Status copied!' : 'Statut copié !'}</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                <span>{isEn ? 'Copy status' : 'Copier mon statut'}</span>
-              </>
-            )}
-          </button>
 
           <button
             type="button"
@@ -563,7 +550,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                     </span>
                   ) : (
                     <span className="text-slate-400 dark:text-slate-500 italic">
-                      {isEn ? 'Closed / Off' : 'Fermé / Repos'}
+                      {offDayLabel}
                     </span>
                   )}
                 </div>

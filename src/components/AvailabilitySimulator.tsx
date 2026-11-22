@@ -27,6 +27,7 @@ import {
   getEffectiveLunchBreak,
   getClosureForDate,
   getUpcomingClosures,
+  getOffDayLabel,
   type AppLang,
   type ScheduleConfig,
   type UserProfile,
@@ -669,10 +670,10 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             <span className="text-slate-400 dark:text-slate-400 block font-medium">1. Horaires du jour ({currentDayName})</span>
             <span className="font-semibold text-slate-800 dark:text-slate-100">
               {activeClosure
-                ? `Fermé — ${activeClosure.label || (activeClosure.type === 'vacation' ? 'Congés' : 'Jour férié')}`
+                ? `${getOffDayLabel(profile?.mode, 'fr')} — ${activeClosure.label || (activeClosure.type === 'vacation' ? 'Congés' : 'Jour férié')}`
                 : daySchedule?.enabled
                 ? `${daySchedule.start} - ${daySchedule.end}`
-                : 'Fermé (Jour non travaillé)'}
+                : `${getOffDayLabel(profile?.mode, 'fr')} (Jour non travaillé)`}
             </span>
           </div>
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">

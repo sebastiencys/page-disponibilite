@@ -436,5 +436,18 @@ test('supports transparent-dark theme, accessible <title> tags across all styles
   assert.equal(jsonEn.lines.length, 3);
 });
 
+test('dark and transparent-dark themes use high-contrast slate ink on OFF_HOURS badges', () => {
+  const sundayOff = new Date('2026-11-08T14:00:00+01:00');
+  const offAvail = calculateAvailability(sundayOff, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'fr');
+  assert.equal(offAvail.status, 'OFF_HOURS');
+
+  for (const theme of ['dark', 'transparent-dark'] as const) {
+    const svg = renderBadgeSvg(offAvail, { style: 'pill', theme });
+    assert.ok(svg.includes('#cbd5e1'), `Theme ${theme} OFF_HOURS pill should use high-contrast #cbd5e1 text`);
+    assert.ok(svg.includes('#94a3b8'), `Theme ${theme} OFF_HOURS pill should use bright dot #94a3b8`);
+  }
+});
+
+
 
 

@@ -231,6 +231,29 @@ export function buildBadgeTextPayload(
 }
 
 /**
+ * Resolves accessible status ink and dot colors for light vs dark badge backgrounds.
+ */
+export function resolveThemeStatusColors(
+  avail: AvailabilityResult,
+  theme: BadgeTheme
+): { badgeColor: string; dotColor: string } {
+  const isDarkTheme = theme === 'dark' || theme === 'transparent-dark';
+  if (!isDarkTheme) {
+    return { badgeColor: avail.badgeColor, dotColor: avail.dotColor };
+  }
+  switch (avail.state) {
+    case 'available':
+      return { badgeColor: '#34d399', dotColor: '#10b981' };
+    case 'busy':
+      return { badgeColor: '#f87171', dotColor: '#ef4444' };
+    case 'away':
+      return { badgeColor: '#fbbf24', dotColor: '#f59e0b' };
+    default:
+      return { badgeColor: '#cbd5e1', dotColor: '#94a3b8' };
+  }
+}
+
+/**
  * Generates dynamic SVG badge with live status and modern multiline typography
  */
 export function renderBadgeSvg(
@@ -273,8 +296,7 @@ export function renderBadgeSvg(
     ? '#94a3b8'
     : '#64748b';
   const countLineColor = isDark || isTransparentDark ? '#a5b4fc' : '#4338ca';
-  const dotColor = avail.dotColor;
-  const badgeColor = avail.badgeColor;
+  const { badgeColor, dotColor } = resolveThemeStatusColors(avail, theme);
 
   const todayCount = Math.max(0, Math.floor(avail.todayAppointmentsCount ?? 0));
   const todayAllDayCount = Math.max(

@@ -14,6 +14,9 @@ import {
   getClosureForDate,
   getUpcomingClosures,
   formatTimeShort,
+  normalizeProfileMode,
+  sanitizeOptionalContactField,
+  getOffDayLabel,
   type CalendarEvent,
   type ScheduleConfig,
   type AnonymizedSlot,
@@ -865,6 +868,35 @@ test('supports lang="en" for all availability states and HH:MM time formatting',
   assert.equal(resHoliday.title, 'Veterans Day');
   assert.equal(resHoliday.subtitle, 'Back Thursday at 09:00');
 });
+
+test('supports profile mode (person vs shop), optional contact sanitization, and localized lunch label', () => {
+  assert.equal(normalizeProfileMode(undefined), 'person');
+  assert.equal(normalizeProfileMode('shop'), 'shop');
+  assert.equal(normalizeProfileMode('Boutique'), 'shop');
+  assert.equal(normalizeProfileMode('personne'), 'person');
+  assert.equal(normalizeProfileMode('unknown', 'shop'), 'shop');
+
+  assert.equal(getOffDayLabel('person', 'fr'), 'Repos');
+  assert.equal(getOffDayLabel('person', 'en'), 'Off');
+  assert.equal(getOffDayLabel('shop', 'fr'), 'Fermé');
+  assert.equal(getOffDayLabel('shop', 'en'), 'Closed');
+
+  assert.equal(sanitizeOptionalContactField(null), '');
+  assert.equal(sanitizeOptionalContactField(undefined), '');
+  assert.equal(sanitizeOptionalContactField('null'), '');
+  assert.equal(sanitizeOptionalContactField(' NULL '), '');
+  assert.equal(sanitizeOptionalContactField('none'), '');
+  assert.equal(sanitizeOptionalContactField('undefined'), '');
+  assert.equal(sanitizeOptionalContactField('   '), '');
+  assert.equal(sanitizeOptionalContactField('  contact@example.com  '), 'contact@example.com');
+
+  const mondayLunchFr = getEffectiveLunchBreak(TEST_SCHEDULE, 1, 'fr');
+  assert.equal(mondayLunchFr.label, 'Pause déjeuner');
+
+  const mondayLunchEn = getEffectiveLunchBreak(TEST_SCHEDULE, 1, 'en');
+  assert.equal(mondayLunchEn.label, 'Lunch break');
+});
+
 
 
 
