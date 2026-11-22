@@ -43,6 +43,13 @@ export function getOffDayLabel(mode: ProfileMode = 'person', lang: AppLang = 'fr
   return lang === 'en' ? 'Off' : 'Repos';
 }
 
+export function getScheduleHeadingLabel(mode: ProfileMode = 'person', lang: AppLang = 'fr'): string {
+  if (mode === 'shop') {
+    return lang === 'en' ? 'Opening hours' : "Horaires d'ouverture";
+  }
+  return lang === 'en' ? 'Regular working hours' : 'Horaires habituels de travail';
+}
+
 export interface DaySchedule {
   enabled: boolean;
   start: string; // "HH:mm" e.g. "09:00"
@@ -105,8 +112,18 @@ export interface UserProfile {
   mode?: ProfileMode;
 }
 
+type EnvRecord = Record<string, string | undefined>;
+
+function getSafeProcessEnv(): EnvRecord | undefined {
+  try {
+    return typeof process !== 'undefined' && process.env ? (process.env as EnvRecord) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const rawPersonal = (personalJson || {}) as Record<string, unknown>;
-export const DEFAULT_PROFILE: UserProfile = {
+const FILE_DEFAULT_PROFILE: UserProfile = {
   name: sanitizeOptionalContactField(rawPersonal.name) || 'DispoLive',
   role: sanitizeOptionalContactField(rawPersonal.role),
   company: sanitizeOptionalContactField(rawPersonal.company),
@@ -114,6 +131,112 @@ export const DEFAULT_PROFILE: UserProfile = {
   bookingUrl: sanitizeOptionalContactField(rawPersonal.bookingUrl),
   mode: normalizeProfileMode(rawPersonal.mode, 'person'),
 };
+
+function hasDefinedEnvVar(env: EnvRecord | undefined, key: string): boolean {
+  return Boolean(env && Object.prototype.hasOwnProperty.call(env, key) && env[key] !== undefined);
+}
+
+function decodeBase64Utf8(raw: string): string {
+  try {
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(raw, 'base64').toString('utf8');
+    }
+    if (typeof atob === 'function') {
+      const binary = atob(raw);
+      const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    }
+  } catch {
+    // Ignore invalid base64 payload
+  }
+  return '';
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function parsePersonalJsonEnv(env: EnvRecord): Record<string, unknown> | null {
+  const rawJson =
+    (env.PERSONAL_JSON && env.PERSONAL_JSON.trim()) ||
+    (env.PERSONAL_JSON_BASE64 && decodeBase64Utf8(env.PERSONAL_JSON_BASE64.trim())) ||
+    '';
+  if (!rawJson) return null;
+  try {
+    const parsed = JSON.parse(rawJson);
+    return isPlainRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves public profile fields with environment variables taking priority over config/personal.json.
+ * Priority: config/personal.json < PERSONAL_JSON(_BASE64) < individual PROFILE_* env vars.
+ */
+export function resolveProfileFromEnv(
+  env: EnvRecord | undefined = getSafeProcessEnv(),
+  baseProfile: UserProfile = FILE_DEFAULT_PROFILE
+): UserProfile {
+  let effectiveName = sanitizeOptionalContactField(baseProfile.name) || 'DispoLive';
+  let effectiveRole = sanitizeOptionalContactField(baseProfile.role);
+  let effectiveCompany = sanitizeOptionalContactField(baseProfile.company);
+  let effectiveEmail = sanitizeOptionalContactField(baseProfile.email);
+  let effectiveBookingUrl = sanitizeOptionalContactField(baseProfile.bookingUrl);
+  let effectiveMode = normalizeProfileMode(baseProfile.mode, 'person');
+
+  if (!env) {
+    return {
+      name: effectiveName,
+      role: effectiveRole,
+      company: effectiveCompany,
+      email: effectiveEmail,
+      bookingUrl: effectiveBookingUrl,
+      mode: effectiveMode,
+    };
+  }
+
+  const jsonOverride = parsePersonalJsonEnv(env);
+  if (jsonOverride) {
+    const jsonName = sanitizeOptionalContactField(jsonOverride.name);
+    if (jsonName) effectiveName = jsonName;
+    if ('role' in jsonOverride && jsonOverride.role !== undefined) {
+      effectiveRole = sanitizeOptionalContactField(jsonOverride.role);
+    }
+    if ('company' in jsonOverride && jsonOverride.company !== undefined) {
+      effectiveCompany = sanitizeOptionalContactField(jsonOverride.company);
+    }
+    if ('email' in jsonOverride && jsonOverride.email !== undefined) {
+      effectiveEmail = sanitizeOptionalContactField(jsonOverride.email);
+    }
+    if ('bookingUrl' in jsonOverride && jsonOverride.bookingUrl !== undefined) {
+      effectiveBookingUrl = sanitizeOptionalContactField(jsonOverride.bookingUrl);
+    }
+    if ('mode' in jsonOverride && jsonOverride.mode !== undefined) {
+      effectiveMode = normalizeProfileMode(jsonOverride.mode, effectiveMode);
+    }
+  }
+
+  const envName = sanitizeOptionalContactField(env.PROFILE_NAME);
+  return {
+    name: envName || effectiveName,
+    role: hasDefinedEnvVar(env, 'PROFILE_ROLE')
+      ? sanitizeOptionalContactField(env.PROFILE_ROLE)
+      : effectiveRole,
+    company: hasDefinedEnvVar(env, 'PROFILE_COMPANY')
+      ? sanitizeOptionalContactField(env.PROFILE_COMPANY)
+      : effectiveCompany,
+    email: hasDefinedEnvVar(env, 'PROFILE_EMAIL')
+      ? sanitizeOptionalContactField(env.PROFILE_EMAIL)
+      : effectiveEmail,
+    bookingUrl: hasDefinedEnvVar(env, 'PROFILE_BOOKING_URL')
+      ? sanitizeOptionalContactField(env.PROFILE_BOOKING_URL)
+      : effectiveBookingUrl,
+    mode: normalizeProfileMode(env.PROFILE_MODE ?? effectiveMode, effectiveMode),
+  };
+}
+
+export const DEFAULT_PROFILE: UserProfile = resolveProfileFromEnv(getSafeProcessEnv(), FILE_DEFAULT_PROFILE);
 
 export type AvailabilityStatus =
   | 'AVAILABLE'
@@ -163,7 +286,527 @@ export interface CalendarSummaryItem {
   isBusyNow: boolean;
 }
 
-export const DEFAULT_SCHEDULE: ScheduleConfig = scheduleJson as unknown as ScheduleConfig;
+const FILE_DEFAULT_SCHEDULE: ScheduleConfig = scheduleJson as unknown as ScheduleConfig;
+
+function normalizeTimeString(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  return parseClockToken(value) ?? fallback;
+}
+
+function parseClockToken(raw: string): string | null {
+  const trimmed = raw.trim().toLowerCase();
+  const match = trimmed.match(/^(\d{1,2})\s*(?::|h)\s*(\d{2})?$/);
+  if (!match) return null;
+  const h = Number(match[1]);
+  const m = match[2] !== undefined ? Number(match[2]) : 0;
+  if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    return null;
+  }
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function parseTimeRangeEnv(raw: string): { start: string; end: string } | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(
+    /^(\d{1,2}(?:\s*(?::|h)\s*\d{0,2})?)\s*(?:-|–|->|\/|to|à)\s*(\d{1,2}(?:\s*(?::|h)\s*\d{0,2})?)$/i
+  );
+  if (!match) return null;
+  const start = parseClockToken(match[1]);
+  const end = parseClockToken(match[2]);
+  if (!start || !end) return null;
+  return { start, end };
+}
+
+function parseEnvBoolean(raw: unknown): boolean | undefined {
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw !== 'string') return undefined;
+  const clean = raw.trim().toLowerCase();
+  if (!clean) return undefined;
+  if (/^(true|1|on|yes|oui|open|ouvert)$/i.test(clean)) return true;
+  if (/^(false|0|off|no|non|repos|ferme|fermé|closed|none)$/i.test(clean)) return false;
+  return undefined;
+}
+
+const DAY_ENV_SUFFIXES: Record<DayOfWeek, string[]> = {
+  0: ['0', 'SUN', 'SUNDAY', 'DIM', 'DIMANCHE'],
+  1: ['1', 'MON', 'MONDAY', 'LUN', 'LUNDI'],
+  2: ['2', 'TUE', 'TUESDAY', 'MAR', 'MARDI'],
+  3: ['3', 'WED', 'WEDNESDAY', 'MER', 'MERCREDI'],
+  4: ['4', 'THU', 'THURSDAY', 'JEU', 'JEUDI'],
+  5: ['5', 'FRI', 'FRIDAY', 'VEN', 'VENDREDI'],
+  6: ['6', 'SAT', 'SATURDAY', 'SAM', 'SAMEDI'],
+};
+
+const DAY_TOKEN_TO_NUMBER: Record<string, DayOfWeek> = (() => {
+  const map: Record<string, DayOfWeek> = {};
+  (Object.keys(DAY_ENV_SUFFIXES) as unknown as DayOfWeek[]).forEach(dayNum => {
+    const num = Number(dayNum) as DayOfWeek;
+    for (const alias of DAY_ENV_SUFFIXES[num]) {
+      map[alias.toLowerCase()] = num;
+    }
+  });
+  return map;
+})();
+
+function getDayEnvValue(env: EnvRecord, prefixes: string[], day: DayOfWeek): string | undefined {
+  const suffixes = DAY_ENV_SUFFIXES[day];
+  for (const prefix of prefixes) {
+    for (const suffix of suffixes) {
+      const exactKey = `${prefix}_${suffix}`;
+      if (hasDefinedEnvVar(env, exactKey) && env[exactKey]!.trim() !== '') {
+        return env[exactKey]!.trim();
+      }
+      const lowerKey = `${prefix}_${suffix.toLowerCase()}`;
+      if (hasDefinedEnvVar(env, lowerKey) && env[lowerKey]!.trim() !== '') {
+        return env[lowerKey]!.trim();
+      }
+    }
+  }
+  return undefined;
+}
+
+function parseWorkDaysEnv(raw: string): Set<DayOfWeek> | null {
+  const clean = raw.trim().toLowerCase();
+  if (!clean) return null;
+  if (/^(none|off|false|0|aucun)$/i.test(clean)) {
+    return new Set<DayOfWeek>();
+  }
+
+  const normalized = clean.replace(/\s*-\s*/g, '-');
+  const tokens = normalized.split(/[,;\s]+/).filter(Boolean);
+  const result = new Set<DayOfWeek>();
+  let matchedAny = false;
+
+  for (const token of tokens) {
+    if (token.includes('-')) {
+      const [startTok, endTok] = token.split('-');
+      const startDay = startTok ? DAY_TOKEN_TO_NUMBER[startTok] : undefined;
+      const endDay = endTok ? DAY_TOKEN_TO_NUMBER[endTok] : undefined;
+      if (startDay !== undefined && endDay !== undefined) {
+        matchedAny = true;
+        let cur = startDay;
+        for (let step = 0; step < 7; step++) {
+          result.add(cur);
+          if (cur === endDay) break;
+          cur = ((cur + 1) % 7) as DayOfWeek;
+        }
+      }
+      continue;
+    }
+
+    const day = DAY_TOKEN_TO_NUMBER[token];
+    if (day !== undefined) {
+      matchedAny = true;
+      result.add(day);
+    }
+  }
+
+  return matchedAny ? result : null;
+}
+
+function parseClosuresEnv(raw: string): ClosurePeriod[] | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (/^(none|off|false|aucun|\[\])$/i.test(trimmed)) {
+    return [];
+  }
+
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter(
+            (item): item is Record<string, unknown> =>
+              isPlainRecord(item) && typeof item.startDate === 'string' && item.startDate.trim().length > 0
+          )
+          .map(item => ({
+            startDate: String(item.startDate).trim(),
+            ...(typeof item.endDate === 'string' && item.endDate.trim()
+              ? { endDate: item.endDate.trim() }
+              : {}),
+            ...(typeof item.label === 'string' && item.label.trim()
+              ? { label: item.label.trim() }
+              : {}),
+            ...(item.type === 'holiday' || item.type === 'vacation' ? { type: item.type } : {}),
+            ...(typeof item.annual === 'boolean' ? { annual: item.annual } : {}),
+          }));
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  const entries = trimmed.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+  const closures: ClosurePeriod[] = [];
+
+  for (const entry of entries) {
+    const parts = entry.split('|').map(p => p.trim());
+    const datePart = parts[0] || '';
+    const dateRangeMatch = datePart.match(
+      /^(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})(?:\s*(?:\.\.|:|to|->|\/)\s*(\d{4}-\d{2}-\d{2}|\d{2}-\d{2}))?$/i
+    );
+    if (!dateRangeMatch) continue;
+
+    const startDate = dateRangeMatch[1];
+    const endDate = dateRangeMatch[2];
+    let label: string | undefined;
+    let type: 'holiday' | 'vacation' | undefined;
+    let annual: boolean | undefined = /^\d{2}-\d{2}$/.test(startDate) ? true : undefined;
+
+    for (const extra of parts.slice(1)) {
+      if (!extra) continue;
+      if (/^(annual|annuel)$/i.test(extra)) {
+        annual = true;
+      } else if (/^(holiday|ferie|férié)$/i.test(extra)) {
+        type = 'holiday';
+      } else if (/^(vacation|conge|congé|conges|congés|leave)$/i.test(extra)) {
+        type = 'vacation';
+      } else if (!label) {
+        label = extra;
+      }
+    }
+
+    if (!type && label && /cong[ée]|vacanc|leave/i.test(label)) {
+      type = 'vacation';
+    }
+
+    closures.push({
+      startDate,
+      ...(endDate ? { endDate } : {}),
+      ...(label ? { label } : {}),
+      ...(type ? { type } : {}),
+      ...(annual !== undefined ? { annual } : {}),
+    });
+  }
+
+  return closures.length > 0 ? closures : undefined;
+}
+
+function mergeScheduleJsonOverride(baseSchedule: ScheduleConfig, rawJson: string): ScheduleConfig {
+  if (!rawJson) return baseSchedule;
+  try {
+    const parsed = JSON.parse(rawJson);
+    if (!isPlainRecord(parsed)) return baseSchedule;
+
+    const mergedDays = { ...baseSchedule.days };
+    if (isPlainRecord(parsed.days)) {
+      const dayKeys: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
+      for (const dayKey of dayKeys) {
+        const candidate = parsed.days[String(dayKey)];
+        const fallbackDay = baseSchedule.days[dayKey] || { enabled: false, start: '09:00', end: '18:00' };
+        if (isPlainRecord(candidate)) {
+          mergedDays[dayKey] = {
+            enabled:
+              typeof candidate.enabled === 'boolean' ? candidate.enabled : Boolean(fallbackDay.enabled),
+            start: normalizeTimeString(candidate.start, fallbackDay.start),
+            end: normalizeTimeString(candidate.end, fallbackDay.end),
+          };
+        }
+      }
+    }
+
+    const baseLunch = baseSchedule.lunchBreak;
+    const rawLunch = isPlainRecord(parsed.lunchBreak) ? parsed.lunchBreak : undefined;
+    const mergedLunchDays: Partial<Record<DayOfWeek, DayLunchOverride>> | undefined =
+      baseLunch.days || (rawLunch && isPlainRecord(rawLunch.days))
+        ? { ...(baseLunch.days || {}) }
+        : undefined;
+    if (mergedLunchDays && rawLunch && isPlainRecord(rawLunch.days)) {
+      const dayKeys: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
+      for (const dayKey of dayKeys) {
+        const dayCandidate = rawLunch.days[String(dayKey)];
+        if (isPlainRecord(dayCandidate)) {
+          mergedLunchDays[dayKey] = {
+            ...(typeof dayCandidate.enabled === 'boolean' ? { enabled: dayCandidate.enabled } : {}),
+            ...(typeof dayCandidate.start === 'string' ? { start: dayCandidate.start.trim() } : {}),
+            ...(typeof dayCandidate.end === 'string' ? { end: dayCandidate.end.trim() } : {}),
+            ...(typeof dayCandidate.label === 'string' ? { label: dayCandidate.label.trim() } : {}),
+          };
+        }
+      }
+    }
+
+    const mergedClosures: ClosurePeriod[] | undefined = Array.isArray(parsed.closures)
+      ? parsed.closures
+          .filter(
+            (item): item is Record<string, unknown> =>
+              isPlainRecord(item) && typeof item.startDate === 'string' && item.startDate.trim().length > 0
+          )
+          .map(item => ({
+            startDate: String(item.startDate).trim(),
+            ...(typeof item.endDate === 'string' && item.endDate.trim()
+              ? { endDate: item.endDate.trim() }
+              : {}),
+            ...(typeof item.label === 'string' && item.label.trim()
+              ? { label: item.label.trim() }
+              : {}),
+            ...(item.type === 'holiday' || item.type === 'vacation' ? { type: item.type } : {}),
+            ...(typeof item.annual === 'boolean' ? { annual: item.annual } : {}),
+          }))
+      : baseSchedule.closures;
+
+    return {
+      timezone:
+        typeof parsed.timezone === 'string' && parsed.timezone.trim()
+          ? parsed.timezone.trim()
+          : baseSchedule.timezone,
+      days: mergedDays,
+      lunchBreak: {
+        enabled:
+          rawLunch && typeof rawLunch.enabled === 'boolean'
+            ? rawLunch.enabled
+            : Boolean(baseLunch.enabled),
+        start: rawLunch ? normalizeTimeString(rawLunch.start, baseLunch.start) : baseLunch.start,
+        end: rawLunch ? normalizeTimeString(rawLunch.end, baseLunch.end) : baseLunch.end,
+        label:
+          rawLunch && typeof rawLunch.label === 'string' && rawLunch.label.trim()
+            ? rawLunch.label.trim()
+            : baseLunch.label,
+        ...(mergedLunchDays ? { days: mergedLunchDays } : {}),
+      },
+      bufferMinutes:
+        typeof parsed.bufferMinutes === 'number' && Number.isFinite(parsed.bufferMinutes) && parsed.bufferMinutes >= 0
+          ? Math.round(parsed.bufferMinutes)
+          : baseSchedule.bufferMinutes,
+      ...(mergedClosures ? { closures: mergedClosures } : {}),
+    };
+  } catch {
+    return baseSchedule;
+  }
+}
+
+/**
+ * Resolves working schedule from environment variables with full feature parity:
+ * Priority: config/schedule.json < SCHEDULE_JSON(_BASE64) < individual SCHEDULE_* env vars.
+ * Supported individual env vars:
+ * - TIMEZONE / SCHEDULE_TIMEZONE
+ * - SCHEDULE_WORK_DAYS (or SCHEDULE_DAYS): e.g. "mon-fri", "mar,mer,jeu,ven", "1,2,3,4,5"
+ * - SCHEDULE_HOURS ("08:30-17:30"), SCHEDULE_START, SCHEDULE_END
+ * - Per-day suffixed overrides (_MON/_LUN/_1 ... _SUN/_DIM/_0):
+ *   SCHEDULE_HOURS_<DAY> ("09:00-13:00" or "off"), SCHEDULE_START_<DAY>, SCHEDULE_END_<DAY>, SCHEDULE_DAY_<DAY>
+ * - Lunch break: SCHEDULE_LUNCH_HOURS, SCHEDULE_LUNCH_START, SCHEDULE_LUNCH_END, SCHEDULE_LUNCH_LABEL, SCHEDULE_LUNCH_ENABLED
+ *   plus per-day suffix: SCHEDULE_LUNCH_HOURS_<DAY>, SCHEDULE_LUNCH_START_<DAY>, SCHEDULE_LUNCH_END_<DAY>, SCHEDULE_LUNCH_LABEL_<DAY>, SCHEDULE_LUNCH_ENABLED_<DAY>
+ * - SCHEDULE_BUFFER_MINUTES, SCHEDULE_CLOSURES
+ */
+export function resolveScheduleFromEnv(
+  env: EnvRecord | undefined = getSafeProcessEnv(),
+  baseSchedule: ScheduleConfig = FILE_DEFAULT_SCHEDULE
+): ScheduleConfig {
+  if (!env) return baseSchedule;
+
+  const rawJson =
+    (env.SCHEDULE_JSON && env.SCHEDULE_JSON.trim()) ||
+    (env.SCHEDULE_JSON_BASE64 && decodeBase64Utf8(env.SCHEDULE_JSON_BASE64.trim())) ||
+    '';
+
+  const afterJson = mergeScheduleJsonOverride(baseSchedule, rawJson);
+  const days: Record<DayOfWeek, DaySchedule> = {
+    0: { ...afterJson.days[0] },
+    1: { ...afterJson.days[1] },
+    2: { ...afterJson.days[2] },
+    3: { ...afterJson.days[3] },
+    4: { ...afterJson.days[4] },
+    5: { ...afterJson.days[5] },
+    6: { ...afterJson.days[6] },
+  };
+  const allDayKeys: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
+
+  // 1. Global working hours (applied across all days before work-days & per-day overrides)
+  const globalRange = env.SCHEDULE_HOURS ? parseTimeRangeEnv(env.SCHEDULE_HOURS) : null;
+  const globalStart = env.SCHEDULE_START ? parseClockToken(env.SCHEDULE_START) : null;
+  const globalEnd = env.SCHEDULE_END ? parseClockToken(env.SCHEDULE_END) : null;
+  if (globalRange || globalStart || globalEnd) {
+    for (const day of allDayKeys) {
+      if (globalRange) {
+        days[day].start = globalRange.start;
+        days[day].end = globalRange.end;
+      }
+      if (globalStart) days[day].start = globalStart;
+      if (globalEnd) days[day].end = globalEnd;
+    }
+  }
+
+  // 2. Enabled working days list
+  const rawWorkDays = env.SCHEDULE_WORK_DAYS ?? env.SCHEDULE_DAYS;
+  if (rawWorkDays && rawWorkDays.trim()) {
+    const enabledSet = parseWorkDaysEnv(rawWorkDays);
+    if (enabledSet !== null) {
+      for (const day of allDayKeys) {
+        days[day].enabled = enabledSet.has(day);
+      }
+    }
+  }
+
+  // 3. Per-day suffixed overrides (_MON, _LUN, _1, ...)
+  for (const day of allDayKeys) {
+    const dayHoursRaw = getDayEnvValue(env, ['SCHEDULE_HOURS'], day);
+    const dayStartRaw = getDayEnvValue(env, ['SCHEDULE_START'], day);
+    const dayEndRaw = getDayEnvValue(env, ['SCHEDULE_END'], day);
+    const dayEnabledRaw = getDayEnvValue(env, ['SCHEDULE_DAY', 'SCHEDULE_ENABLED'], day);
+
+    if (dayHoursRaw !== undefined) {
+      const boolOff = parseEnvBoolean(dayHoursRaw);
+      if (boolOff === false) {
+        days[day].enabled = false;
+      } else {
+        const range = parseTimeRangeEnv(dayHoursRaw);
+        if (range) {
+          days[day].start = range.start;
+          days[day].end = range.end;
+          days[day].enabled = true;
+        }
+      }
+    }
+    if (dayStartRaw !== undefined) {
+      const parsedStart = parseClockToken(dayStartRaw);
+      if (parsedStart) days[day].start = parsedStart;
+    }
+    if (dayEndRaw !== undefined) {
+      const parsedEnd = parseClockToken(dayEndRaw);
+      if (parsedEnd) days[day].end = parsedEnd;
+    }
+    if (dayEnabledRaw !== undefined) {
+      const parsedBool = parseEnvBoolean(dayEnabledRaw);
+      if (parsedBool !== undefined) days[day].enabled = parsedBool;
+    }
+  }
+
+  // 4. Global lunch break + per-day suffixed lunch break overrides
+  const lunchDays: Partial<Record<DayOfWeek, DayLunchOverride>> = afterJson.lunchBreak.days
+    ? { ...afterJson.lunchBreak.days }
+    : {};
+  let lunchEnabled = Boolean(afterJson.lunchBreak.enabled);
+  let lunchStart = afterJson.lunchBreak.start;
+  let lunchEnd = afterJson.lunchBreak.end;
+  let lunchLabel = afterJson.lunchBreak.label;
+
+  if (env.SCHEDULE_LUNCH_HOURS && env.SCHEDULE_LUNCH_HOURS.trim()) {
+    const lunchBool = parseEnvBoolean(env.SCHEDULE_LUNCH_HOURS);
+    if (lunchBool === false) {
+      lunchEnabled = false;
+    } else {
+      const lunchRange = parseTimeRangeEnv(env.SCHEDULE_LUNCH_HOURS);
+      if (lunchRange) {
+        lunchStart = lunchRange.start;
+        lunchEnd = lunchRange.end;
+        lunchEnabled = true;
+      }
+    }
+  }
+  if (env.SCHEDULE_LUNCH_START) {
+    const s = parseClockToken(env.SCHEDULE_LUNCH_START);
+    if (s) lunchStart = s;
+  }
+  if (env.SCHEDULE_LUNCH_END) {
+    const e = parseClockToken(env.SCHEDULE_LUNCH_END);
+    if (e) lunchEnd = e;
+  }
+  if (env.SCHEDULE_LUNCH_LABEL && env.SCHEDULE_LUNCH_LABEL.trim()) {
+    lunchLabel = env.SCHEDULE_LUNCH_LABEL.trim();
+  }
+  if (env.SCHEDULE_LUNCH_ENABLED !== undefined) {
+    const parsedLunchEnabled = parseEnvBoolean(env.SCHEDULE_LUNCH_ENABLED);
+    if (parsedLunchEnabled !== undefined) lunchEnabled = parsedLunchEnabled;
+  }
+
+  for (const day of allDayKeys) {
+    const dayLunchHoursRaw = getDayEnvValue(env, ['SCHEDULE_LUNCH_HOURS'], day);
+    const dayLunchStartRaw = getDayEnvValue(env, ['SCHEDULE_LUNCH_START'], day);
+    const dayLunchEndRaw = getDayEnvValue(env, ['SCHEDULE_LUNCH_END'], day);
+    const dayLunchLabelRaw = getDayEnvValue(env, ['SCHEDULE_LUNCH_LABEL'], day);
+    const dayLunchEnabledRaw = getDayEnvValue(env, ['SCHEDULE_LUNCH_ENABLED', 'SCHEDULE_LUNCH'], day);
+
+    if (
+      dayLunchHoursRaw !== undefined ||
+      dayLunchStartRaw !== undefined ||
+      dayLunchEndRaw !== undefined ||
+      dayLunchLabelRaw !== undefined ||
+      dayLunchEnabledRaw !== undefined
+    ) {
+      const existing: DayLunchOverride = { ...(lunchDays[day] || {}) };
+
+      if (dayLunchHoursRaw !== undefined) {
+        const boolOff = parseEnvBoolean(dayLunchHoursRaw);
+        if (boolOff === false) {
+          existing.enabled = false;
+        } else {
+          const range = parseTimeRangeEnv(dayLunchHoursRaw);
+          if (range) {
+            existing.start = range.start;
+            existing.end = range.end;
+            existing.enabled = true;
+          }
+        }
+      }
+      if (dayLunchStartRaw !== undefined) {
+        const s = parseClockToken(dayLunchStartRaw);
+        if (s) existing.start = s;
+      }
+      if (dayLunchEndRaw !== undefined) {
+        const e = parseClockToken(dayLunchEndRaw);
+        if (e) existing.end = e;
+      }
+      if (dayLunchLabelRaw !== undefined && dayLunchLabelRaw.trim()) {
+        existing.label = dayLunchLabelRaw.trim();
+      }
+      if (dayLunchEnabledRaw !== undefined) {
+        const b = parseEnvBoolean(dayLunchEnabledRaw);
+        if (b !== undefined) existing.enabled = b;
+      }
+
+      lunchDays[day] = existing;
+    }
+  }
+
+  // 5. Timezone, buffer, and closures
+  const envTimezone =
+    sanitizeOptionalContactField(env.SCHEDULE_TIMEZONE) ||
+    sanitizeOptionalContactField(env.TIMEZONE);
+  const timezone = envTimezone || afterJson.timezone;
+
+  let bufferMinutes = afterJson.bufferMinutes;
+  if (env.SCHEDULE_BUFFER_MINUTES !== undefined && env.SCHEDULE_BUFFER_MINUTES.trim() !== '') {
+    const parsedBuf = Number(env.SCHEDULE_BUFFER_MINUTES.trim());
+    if (Number.isFinite(parsedBuf) && parsedBuf >= 0) {
+      bufferMinutes = Math.round(parsedBuf);
+    }
+  }
+
+  const envClosures =
+    env.SCHEDULE_CLOSURES !== undefined ? parseClosuresEnv(env.SCHEDULE_CLOSURES) : undefined;
+  const closures = envClosures !== undefined ? envClosures : afterJson.closures;
+
+  return {
+    timezone,
+    days,
+    lunchBreak: {
+      enabled: lunchEnabled,
+      start: lunchStart,
+      end: lunchEnd,
+      label: lunchLabel,
+      ...(Object.keys(lunchDays).length > 0 ? { days: lunchDays } : {}),
+    },
+    bufferMinutes,
+    ...(closures !== undefined ? { closures } : {}),
+  };
+}
+
+export function resolveEffectiveTimezone(
+  env: EnvRecord | undefined = getSafeProcessEnv(),
+  schedule: ScheduleConfig = DEFAULT_SCHEDULE
+): string {
+  const envTz =
+    sanitizeOptionalContactField(env?.SCHEDULE_TIMEZONE) ||
+    sanitizeOptionalContactField(env?.TIMEZONE);
+  return envTz || schedule.timezone || 'Europe/Paris';
+}
+
+export const DEFAULT_SCHEDULE: ScheduleConfig = resolveScheduleFromEnv(
+  getSafeProcessEnv(),
+  FILE_DEFAULT_SCHEDULE
+);
 
 function parseTimeToMinutes(timeStr: string): number {
   const [h, m] = timeStr.split(':').map(Number);
@@ -659,10 +1302,20 @@ export function calculateAvailability(
   events: CalendarEvent[],
   override?: ManualOverride | null,
   timezoneOverride?: string,
-  lang: AppLang = 'fr'
+  lang: AppLang = 'fr',
+  mode: ProfileMode = 'person'
 ): AvailabilityResult {
   const isEn = normalizeAppLang(lang, 'fr') === 'en';
   const resolvedLang: AppLang = isEn ? 'en' : 'fr';
+  const resolvedMode: ProfileMode = normalizeProfileMode(mode, 'person');
+  const offHoursTitle =
+    resolvedMode === 'shop'
+      ? isEn
+        ? 'Closed'
+        : 'Fermé'
+      : isEn
+      ? 'Outside working hours'
+      : 'Hors horaires de travail';
   const timeZone = timezoneOverride || schedule.timezone || 'Europe/Paris';
   const zoned = getZonedDateParts(now, timeZone);
   const normalizedEvents = normalizeEventsForSchedule(events, schedule, timeZone);
@@ -885,7 +1538,7 @@ export function calculateAvailability(
       state: 'off',
       badgeColor: '#64748B',
       dotColor: '#475569',
-      title: isEn ? 'Outside working hours' : 'Hors horaires de travail',
+      title: offHoursTitle,
       subtitle: `${isEn ? 'Back' : 'Reprise'} ${nextStart.text}`,
       isWorkTime: false,
       nextFreeTime: nextStart.text,
@@ -906,7 +1559,7 @@ export function calculateAvailability(
       state: 'off',
       badgeColor: '#64748B',
       dotColor: '#475569',
-      title: isEn ? 'Outside working hours' : 'Hors horaires de travail',
+      title: offHoursTitle,
       subtitle: `${isEn ? 'Back' : 'Reprise'} ${nextStart.text}`,
       isWorkTime: false,
       nextFreeTime: nextStart.text,

@@ -29,6 +29,7 @@ import {
   getUpcomingClosures,
   getOffDayLabel,
   type AppLang,
+  type ProfileMode,
   type ScheduleConfig,
   type UserProfile,
   type AvailabilityResult,
@@ -84,6 +85,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const [timeStr, setTimeStr] = useState<string>(initialTimeStr);
   const [theme, setTheme] = useState<BadgeTheme>('light');
   const [lang, setLang] = useState<AppLang>('fr');
+  const [simMode, setSimMode] = useState<ProfileMode>(profile?.mode ?? 'person');
   const [copiedStyle, setCopiedStyle] = useState<string | null>(null);
 
   // Minutes from 00:00 for the 24h interactive slider
@@ -118,23 +120,24 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   }, [upcomingSlots]);
 
   const localSimulatedAvailability = useMemo<AvailabilityResult>(() => {
-    return calculateAvailability(simulatedDate, schedule, anonymizedEvents, { type: 'auto' }, timezone, lang);
-  }, [simulatedDate, schedule, anonymizedEvents, timezone, lang]);
+    return calculateAvailability(simulatedDate, schedule, anonymizedEvents, { type: 'auto' }, timezone, lang, simMode);
+  }, [simulatedDate, schedule, anonymizedEvents, timezone, lang, simMode]);
 
   const [serverSimulation, setServerSimulation] = useState<{
     iso: string;
     lang: AppLang;
+    mode: ProfileMode;
     availability: AvailabilityResult;
     calendars?: CalendarSummaryItem[];
   } | null>(null);
 
-  // Query server /api/status?time=...&lang=... so ALL calendar events are evaluated truthfully
+  // Query server /api/status?time=...&lang=...&mode=... so ALL calendar events are evaluated truthfully
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/status?time=${encodeURIComponent(simulatedIso)}&lang=${lang}`,
+          `/api/status?time=${encodeURIComponent(simulatedIso)}&lang=${lang}&mode=${simMode}`,
           { signal: controller.signal }
         );
         if (res.ok) {
@@ -143,6 +146,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             setServerSimulation({
               iso: simulatedIso,
               lang,
+              mode: simMode,
               availability: data.availability,
               calendars: Array.isArray(data.calendars) ? data.calendars : undefined,
             });
@@ -157,14 +161,19 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [simulatedIso, lang]);
+  }, [simulatedIso, lang, simMode]);
 
   const simulatedAvailability = useMemo<AvailabilityResult>(() => {
-    if (serverSimulation && serverSimulation.iso === simulatedIso && serverSimulation.lang === lang) {
+    if (
+      serverSimulation &&
+      serverSimulation.iso === simulatedIso &&
+      serverSimulation.lang === lang &&
+      serverSimulation.mode === simMode
+    ) {
       return serverSimulation.availability;
     }
     return localSimulatedAvailability;
-  }, [serverSimulation, simulatedIso, lang, localSimulatedAvailability]);
+  }, [serverSimulation, simulatedIso, lang, simMode, localSimulatedAvailability]);
 
   const simulatedCalendars = useMemo<CalendarSummaryItem[]>(() => {
     if (serverSimulation && serverSimulation.iso === simulatedIso && serverSimulation.calendars) {
@@ -330,7 +339,8 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const buildCommonParams = () => {
     const iso = simulatedDate.toISOString();
     const langParam = lang === 'en' ? '&lang=en' : '';
-    return `time=${encodeURIComponent(iso)}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}${langParam}`;
+    const modeParam = simMode !== (profile?.mode ?? 'person') ? `&mode=${simMode}` : '';
+    return `time=${encodeURIComponent(iso)}&name=${encodeURIComponent(profile.name || DEFAULT_PROFILE.name)}&role=${encodeURIComponent(profile.role || DEFAULT_PROFILE.role)}&company=${encodeURIComponent(profile.company || DEFAULT_PROFILE.company)}${langParam}${modeParam}`;
   };
 
   const getSimulatedPngUrl = (style: BadgeStyle) => {
@@ -392,8 +402,33 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             </div>
           </div>
 
-          {/* Theme & Language Selectors */}
+          {/* Mode, Theme & Language Selectors */}
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setSimMode('person')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  simMode === 'person'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                Personne
+              </button>
+              <button
+                type="button"
+                onClick={() => setSimMode('shop')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  simMode === 'shop'
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                Boutique
+              </button>
+            </div>
+
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button
                 type="button"
@@ -670,10 +705,10 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             <span className="text-slate-400 dark:text-slate-400 block font-medium">1. Horaires du jour ({currentDayName})</span>
             <span className="font-semibold text-slate-800 dark:text-slate-100">
               {activeClosure
-                ? `${getOffDayLabel(profile?.mode, 'fr')} — ${activeClosure.label || (activeClosure.type === 'vacation' ? 'Congés' : 'Jour férié')}`
+                ? `${getOffDayLabel(simMode, 'fr')} — ${activeClosure.label || (activeClosure.type === 'vacation' ? 'Congés' : 'Jour férié')}`
                 : daySchedule?.enabled
                 ? `${daySchedule.start} - ${daySchedule.end}`
-                : `${getOffDayLabel(profile?.mode, 'fr')} (Jour non travaillé)`}
+                : `${getOffDayLabel(simMode, 'fr')} (${simMode === 'shop' ? 'Fermé' : 'Jour non travaillé'})`}
             </span>
           </div>
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">

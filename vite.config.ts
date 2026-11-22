@@ -17,9 +17,24 @@ function escapeHtml(value: string): string {
 }
 
 function readPersonalName(): string {
+  const envName = process.env.PROFILE_NAME?.trim();
+  if (envName) {
+    return envName;
+  }
+  const personalJsonRaw = process.env.PERSONAL_JSON?.trim();
+  if (personalJsonRaw) {
+    try {
+      const parsed = JSON.parse(personalJsonRaw);
+      if (typeof parsed?.name === 'string' && parsed.name.trim()) {
+        return parsed.name.trim();
+      }
+    } catch {
+      // Ignore malformed PERSONAL_JSON
+    }
+  }
   const candidates = [
     path.resolve(__dirname, 'config/personal.json'),
-    path.resolve(__dirname, 'config/personal.example.json'),
+    path.resolve(__dirname, 'config/personal.json.example'),
   ];
   for (const filePath of candidates) {
     try {
@@ -56,6 +71,9 @@ function dispoLiveApiPlugin() {
     },
     configureServer(server: any) {
       server.middlewares.use(async (req: any, res: any, next: any) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         try {
           const handled = await handleApiRequest(req, res);
           if (!handled) next();

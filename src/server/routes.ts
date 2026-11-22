@@ -13,7 +13,9 @@ import {
   getZonedDateParts,
   normalizeAppLang,
   normalizeProfileMode,
-  sanitizeOptionalContactField,
+  resolveProfileFromEnv,
+  resolveScheduleFromEnv,
+  resolveEffectiveTimezone,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type ProfileMode,
@@ -46,6 +48,7 @@ import {
   verifyStudioPassword,
   createStudioSessionToken,
   isRequestStudioAuthenticated,
+  isHttpsRequest,
   buildSessionCookieHeader,
   buildClearSessionCookieHeader,
   extractClientIp,
@@ -151,11 +154,21 @@ export async function handleApiRequest(
   const pathname = urlObj.pathname || '';
   const query = urlObj.query;
 
-  // Set CORS headers
+  const isApiOrBadgeRoute =
+    pathname.startsWith('/api/') || /^\/badge(?:\.(?:png|svg|json))?$/i.test(pathname);
+  if (!isApiOrBadgeRoute) {
+    return false;
+  }
+
+  // Set CORS and baseline security headers for API endpoints
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
   res.setHeader('Access-Control-Expose-Headers', 'ETag');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -164,6 +177,7 @@ export async function handleApiRequest(
   }
 
   const isHead = req.method === 'HEAD';
+  const secureCookie = isHttpsRequest(req.headers, Boolean((req.socket as any)?.encrypted));
 
   // Studio authentication endpoint (password stored in process.env.STUDIO_PASSWORD)
   if (pathname === '/api/studio-auth') {
@@ -179,7 +193,7 @@ export async function handleApiRequest(
     }
 
     if (req.method === 'DELETE') {
-      res.setHeader('Set-Cookie', buildClearSessionCookieHeader());
+      res.setHeader('Set-Cookie', buildClearSessionCookieHeader(secureCookie));
       res.statusCode = 200;
       res.end(JSON.stringify({ authenticated: false, passwordRequired }));
       return true;
@@ -238,7 +252,7 @@ export async function handleApiRequest(
 
         clearAuthFailures(clientIp);
         const token = createStudioSessionToken();
-        res.setHeader('Set-Cookie', buildSessionCookieHeader(token));
+        res.setHeader('Set-Cookie', buildSessionCookieHeader(token, undefined, secureCookie));
         res.statusCode = 200;
         res.end(JSON.stringify({ authenticated: true, passwordRequired: true, token }));
         return true;
@@ -252,7 +266,7 @@ export async function handleApiRequest(
 
   if (pathname === '/api/studio-logout' && req.method === 'POST') {
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Set-Cookie', buildClearSessionCookieHeader());
+    res.setHeader('Set-Cookie', buildClearSessionCookieHeader(secureCookie));
     res.statusCode = 200;
     res.end(JSON.stringify({ authenticated: false, passwordRequired: isStudioPasswordRequired() }));
     return true;
@@ -305,7 +319,8 @@ export async function handleApiRequest(
     return true;
   }
 
-  const serverTimezone = process.env.TIMEZONE || globalStore.schedule.timezone || 'Europe/Paris';
+  const effectiveSchedule = resolveScheduleFromEnv(process.env, globalStore.schedule);
+  const serverTimezone = resolveEffectiveTimezone(process.env, effectiveSchedule);
 
   // Healthcheck / ICS warm-up endpoint (detailed source metadata restricted to authenticated Studio sessions)
   if (pathname === '/api/health') {
@@ -334,12 +349,22 @@ export async function handleApiRequest(
     return true;
   }
 
+  const effectiveProfile = resolveProfileFromEnv(process.env, {
+    name: globalStore.name,
+    role: globalStore.role,
+    company: globalStore.company,
+    email: globalStore.email,
+    bookingUrl: globalStore.bookingUrl,
+    mode: globalStore.mode,
+  });
+  const requestMode = normalizeProfileMode(query.mode, effectiveProfile.mode ?? 'person');
+
   const badgeStyle = normalizeBadgeStyle(query.style, 'pill');
   const badgeTheme = normalizeBadgeTheme(query.theme, 'light');
   const badgeLang = normalizeAppLang(query.lang, 'fr');
-  const badgeName = sanitizeQueryField(query.name, globalStore.name);
-  const badgeRole = sanitizeQueryField(query.role, globalStore.role);
-  const badgeCompany = sanitizeQueryField(query.company, globalStore.company);
+  const badgeName = sanitizeQueryField(query.name, effectiveProfile.name);
+  const badgeRole = sanitizeQueryField(query.role, effectiveProfile.role);
+  const badgeCompany = sanitizeQueryField(query.company, effectiveProfile.company);
   const queryFormat = typeof query.format === 'string' ? query.format.trim().toLowerCase() : '';
 
   // 1. Dynamic SVG Badge
@@ -362,11 +387,12 @@ export async function handleApiRequest(
     const currentEvents = await resolveCurrentEvents(now);
     const avail = calculateAvailability(
       now,
-      globalStore.schedule,
+      effectiveSchedule,
       currentEvents,
       globalStore.override,
       serverTimezone,
-      badgeLang
+      badgeLang,
+      requestMode
     );
 
     const badgeOptions = {
@@ -409,16 +435,17 @@ export async function handleApiRequest(
       await resolveCurrentCalendarState(now);
     const avail = calculateAvailability(
       now,
-      globalStore.schedule,
+      effectiveSchedule,
       currentEvents,
       globalStore.override,
       serverTimezone,
-      badgeLang
+      badgeLang,
+      requestMode
     );
     const calendarSummaries = getCalendarSummaries(
       now,
       currentEvents,
-      globalStore.schedule,
+      effectiveSchedule,
       serverTimezone,
       syncedCalendars.map(c => ({ id: c.id, label: c.label }))
     );
@@ -458,11 +485,12 @@ export async function handleApiRequest(
     const currentEvents = await resolveCurrentEvents(now);
     const avail = calculateAvailability(
       now,
-      globalStore.schedule,
+      effectiveSchedule,
       currentEvents,
       globalStore.override,
       serverTimezone,
-      badgeLang
+      badgeLang,
+      requestMode
     );
 
     const badgeOptions = {
@@ -509,31 +537,27 @@ export async function handleApiRequest(
       await resolveCurrentCalendarState(now, forceRefresh);
     const avail = calculateAvailability(
       now,
-      globalStore.schedule,
+      effectiveSchedule,
       currentEvents,
       globalStore.override,
       serverTimezone,
-      badgeLang
+      badgeLang,
+      requestMode
     );
     const upcomingSlots = getAnonymizedUpcomingSlots(
       currentEvents,
       now,
       8,
-      globalStore.schedule,
+      effectiveSchedule,
       serverTimezone,
       badgeLang
     );
     const calendarSummaries = getCalendarSummaries(
       now,
       currentEvents,
-      globalStore.schedule,
+      effectiveSchedule,
       serverTimezone,
       syncedCalendars.map(c => ({ id: c.id, label: c.label }))
-    );
-
-    const resolvedProfileMode = normalizeProfileMode(
-      process.env.PROFILE_MODE ?? globalStore.mode ?? DEFAULT_PROFILE.mode,
-      'person'
     );
 
     const statusPayload = {
@@ -545,13 +569,14 @@ export async function handleApiRequest(
       calendars: calendarSummaries,
       envCalendars: studioAuthed ? syncedCalendars : [],
       upcomingSlots,
+      schedule: effectiveSchedule,
       profile: {
-        name: globalStore.name,
-        role: globalStore.role,
-        company: globalStore.company,
-        email: sanitizeOptionalContactField(globalStore.email),
-        bookingUrl: sanitizeOptionalContactField(globalStore.bookingUrl),
-        mode: resolvedProfileMode,
+        name: effectiveProfile.name,
+        role: effectiveProfile.role,
+        company: effectiveProfile.company,
+        email: effectiveProfile.email,
+        bookingUrl: effectiveProfile.bookingUrl,
+        mode: requestMode,
       },
     };
     const zonedNow = getZonedDateParts(now, serverTimezone);

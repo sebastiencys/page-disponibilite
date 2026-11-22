@@ -24,3 +24,25 @@ test('buildPublicVCard formats RFC 3.0 vCard with proper escaping and no sensiti
   assert.ok(vcf.includes('URL;TYPE=Status:https://dispo.example.com/?view=public\r\n'));
   assert.ok(vcf.endsWith('END:VCARD\r\n'));
 });
+
+test('buildPublicVCard omits "null", "none", "undefined", and blank contact fields cleanly', () => {
+  const vcf = buildPublicVCard(
+    {
+      name: 'null',
+      role: 'none',
+      company: 'undefined',
+      email: ' NULL ',
+      bookingUrl: '   ',
+    },
+    'undefined'
+  );
+
+  assert.ok(vcf.includes('FN:Contact\r\n'));
+  assert.ok(vcf.includes('N:;Contact;;;\r\n'));
+  assert.ok(!vcf.includes('ORG:'));
+  assert.ok(!vcf.includes('TITLE:'));
+  assert.ok(!vcf.includes('EMAIL'));
+  assert.ok(!vcf.includes('URL;TYPE='));
+  assert.ok(!/null|none|undefined/i.test(vcf));
+});
+

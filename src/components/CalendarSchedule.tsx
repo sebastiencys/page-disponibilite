@@ -20,6 +20,7 @@ import {
   type ScheduleConfig,
   type DayOfWeek,
 } from '../lib/availability.ts';
+import { EnvJsonConverter } from './EnvJsonConverter.tsx';
 
 interface EnvCalendarDisplay {
   id: string;
@@ -97,22 +98,30 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                 </p>
               </div>
 
-              {/* JSON Badge */}
+              {/* JSON / Env Badge */}
               <div
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-medium border border-slate-200 dark:border-slate-700 shrink-0"
-                title="Configuré dans config/schedule.json"
+                title="Configurable via SCHEDULE_JSON (.env) ou config/schedule.json"
               >
                 <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                config/schedule.json
+                SCHEDULE_JSON
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
               <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
               <span>
-                Ces horaires sont <strong>sécurisés et protégés en lecture seule</strong> dans le code pour empêcher toute modification par des tiers.
+                Ces horaires sont <strong>protégés côté serveur</strong> via <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">SCHEDULE_JSON</code> dans <code className="font-mono">.env</code> (ou <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">config/schedule.json</code>).
               </span>
             </div>
+
+            <EnvJsonConverter
+              envVarName="SCHEDULE_JSON"
+              title="Convertir un schedule.json → SCHEDULE_JSON"
+              description="Collez votre fichier schedule.json (même multi-lignes) pour le compresser en une seule ligne .env ou valeur Vercel prête à copier."
+              currentObject={schedule}
+              placeholder={`{\n  "timezone": "Europe/Paris",\n  "days": {\n    "1": { "enabled": true, "start": "09:00", "end": "18:00" }\n  },\n  "lunchBreak": { "enabled": true, "start": "12:30", "end": "13:30", "label": "Pause déjeuner" }\n}`}
+            />
 
             <div className="space-y-2.5">
               {DAYS_META.map(({ key, label }) => {

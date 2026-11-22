@@ -7,7 +7,9 @@ import {
   getZonedDateParts,
   normalizeAppLang,
   normalizeProfileMode,
-  sanitizeOptionalContactField,
+  resolveProfileFromEnv,
+  resolveScheduleFromEnv,
+  resolveEffectiveTimezone,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type CalendarEvent,
@@ -23,6 +25,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Expose-Headers', 'ETag');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -39,7 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!isNaN(parsed.getTime())) now = parsed;
   }
   const lang = normalizeAppLang(req.query?.lang, 'fr');
-  const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
+  const schedule = resolveScheduleFromEnv(process.env, DEFAULT_SCHEDULE);
+  const timezone = resolveEffectiveTimezone(process.env, schedule);
   const studioAuthed = isRequestStudioAuthenticated(req.headers);
   const forceRefresh =
     (req.query?.refresh === '1' || req.query?.refresh === 'true') && studioAuthed;
@@ -50,12 +56,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     events = synced.events;
   }
 
-  const avail = calculateAvailability(now, DEFAULT_SCHEDULE, events, undefined, timezone, lang);
-  const upcomingSlots = getAnonymizedUpcomingSlots(events, now, 8, DEFAULT_SCHEDULE, timezone, lang);
+  const effectiveProfile = resolveProfileFromEnv(process.env, DEFAULT_PROFILE);
+  const mode = normalizeProfileMode(req.query?.mode, effectiveProfile.mode ?? 'person');
+
+  const avail = calculateAvailability(now, schedule, events, undefined, timezone, lang, mode);
+  const upcomingSlots = getAnonymizedUpcomingSlots(events, now, 8, schedule, timezone, lang);
   const calendarSummaries = getCalendarSummaries(
     now,
     events,
-    DEFAULT_SCHEDULE,
+    schedule,
     timezone,
     synced.calendars.map(c => ({ id: c.id, label: c.label }))
   );
@@ -69,13 +78,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     calendars: calendarSummaries,
     envCalendars: studioAuthed ? synced.calendars : [],
     upcomingSlots,
+    schedule,
     profile: {
-      name: DEFAULT_PROFILE.name,
-      role: DEFAULT_PROFILE.role,
-      company: DEFAULT_PROFILE.company,
-      email: sanitizeOptionalContactField(DEFAULT_PROFILE.email),
-      bookingUrl: sanitizeOptionalContactField(DEFAULT_PROFILE.bookingUrl),
-      mode: normalizeProfileMode(process.env.PROFILE_MODE ?? DEFAULT_PROFILE.mode, 'person'),
+      name: effectiveProfile.name,
+      role: effectiveProfile.role,
+      company: effectiveProfile.company,
+      email: effectiveProfile.email,
+      bookingUrl: effectiveProfile.bookingUrl,
+      mode,
     },
   };
   const zonedNow = getZonedDateParts(now, timezone);

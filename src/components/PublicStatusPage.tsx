@@ -16,6 +16,7 @@ import {
   Link2,
   UserPlus,
   QrCode,
+  RefreshCw,
 } from 'lucide-react';
 import {
   getZonedDateParts,
@@ -23,6 +24,7 @@ import {
   getUpcomingClosures,
   formatTimeShort,
   getOffDayLabel,
+  getScheduleHeadingLabel,
   sanitizeOptionalContactField,
   type AppLang,
   type ProfileMode,
@@ -54,6 +56,8 @@ interface PublicStatusPageProps {
   lang?: AppLang;
   onChangeLang?: (lang: AppLang) => void;
   now?: Date;
+  lastSyncedAt?: Date | null;
+  onRefresh?: () => Promise<void> | void;
   onGoToStudio?: () => void;
 }
 
@@ -88,16 +92,21 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
   lang = 'fr',
   onChangeLang,
   now = new Date(),
+  lastSyncedAt = null,
+  onRefresh,
   onGoToStudio,
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isEn = lang === 'en';
   const dayLabels = DAY_LABELS_BY_LANG[lang];
   const contactEmail = sanitizeOptionalContactField(profile.email);
   const bookingHref = sanitizeOptionalContactField(profile.bookingUrl);
+  const hasPrimaryContactCta = Boolean(bookingHref || contactEmail);
   const offDayLabel = getOffDayLabel(profile.mode, lang);
+  const scheduleHeading = getScheduleHeadingLabel(profile.mode, lang);
 
   const todayRdvLabel = formatTodayAppointmentsLabel(
     availability.todayAppointmentsCount ?? 0,
@@ -404,17 +413,21 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
           <button
             type="button"
             onClick={handleCopyLink}
-            className="w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+            className={
+              hasPrimaryContactCta
+                ? 'w-full sm:w-auto px-4 py-3 bg-white hover:bg-slate-50 dark:bg-slate-800/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap'
+                : 'w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap'
+            }
             title={isEn ? 'Copy public page URL' : 'Copier le lien de cette page publique'}
           >
             {copiedLink ? (
               <>
-                <Check className="w-4 h-4 text-emerald-500" />
+                <Check className={`w-4 h-4 ${hasPrimaryContactCta ? 'text-emerald-500' : 'text-emerald-200'}`} />
                 <span>{isEn ? 'Link copied!' : 'Lien copié !'}</span>
               </>
             ) : (
               <>
-                <Link2 className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <Link2 className={`w-4 h-4 ${hasPrimaryContactCta ? 'text-slate-500 dark:text-slate-400' : 'text-white'}`} />
                 <span>{isEn ? 'Copy link' : 'Copier le lien'}</span>
               </>
             )}
@@ -515,7 +528,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-            {isEn ? 'Regular working hours' : 'Horaires habituels de travail'}
+            {scheduleHeading}
           </h2>
           <span className="text-xs font-medium text-slate-500 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md w-fit">
             {isEn ? 'Timezone:' : 'Fuseau :'} {timezone}
@@ -637,8 +650,36 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
         )}
       </div>
 
-      {/* Discreet owner access & JSON API footer */}
+      {/* Discreet owner access, live refresh & JSON API footer */}
       <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
+        {onRefresh && (
+          <>
+            <button
+              type="button"
+              disabled={isRefreshing}
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  await onRefresh();
+                } finally {
+                  setIsRefreshing(false);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-indigo-600 dark:text-slate-500 dark:hover:text-indigo-400 disabled:opacity-60 font-medium transition-colors cursor-pointer"
+              title={isEn ? 'Refresh live availability now' : 'Actualiser la disponibilité maintenant'}
+            >
+              <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>
+                {lastSyncedAt
+                  ? `${isEn ? 'Updated' : 'Mis à jour'} ${formatTimeShort(lastSyncedAt, timezone, lang)}`
+                  : isEn
+                  ? 'Refresh'
+                  : 'Actualiser'}
+              </span>
+            </button>
+            <span className="text-slate-300 dark:text-slate-700 text-[11px]">•</span>
+          </>
+        )}
         <a
           href={`/api/badge.json${isEn ? '?lang=en' : ''}`}
           target="_blank"

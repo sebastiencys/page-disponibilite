@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { DEFAULT_SCHEDULE } from '../src/lib/availability.ts';
+import {
+  DEFAULT_SCHEDULE,
+  resolveScheduleFromEnv,
+  resolveEffectiveTimezone,
+} from '../src/lib/availability.ts';
 import { parseIcsEvents } from '../src/lib/icalParser.ts';
 import { isRequestStudioAuthenticated } from '../src/server/studioAuth.ts';
 import {
@@ -32,7 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const icsText = await fetchSafeExternalIcs(url);
-    const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
+    const timezone = resolveEffectiveTimezone(
+      process.env,
+      resolveScheduleFromEnv(process.env, DEFAULT_SCHEDULE)
+    );
     const events = parseIcsEvents(icsText, timezone);
 
     return res.status(200).json({ success: true, count: events.length });

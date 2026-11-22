@@ -7,7 +7,12 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { parseIcsEvents } from '../lib/icalParser.ts';
-import { DEFAULT_SCHEDULE, type CalendarEvent } from '../lib/availability.ts';
+import {
+  DEFAULT_SCHEDULE,
+  resolveScheduleFromEnv,
+  resolveEffectiveTimezone,
+  type CalendarEvent,
+} from '../lib/availability.ts';
 
 export interface EnvCalendarSource {
   id: string;
@@ -547,7 +552,10 @@ export async function getSyncedCalendarEvents(
     return { events: [], fromCache: false, lastSync: null, calendars: [] };
   }
 
-  const timezone = process.env.TIMEZONE || DEFAULT_SCHEDULE.timezone || 'Europe/Paris';
+  const timezone = resolveEffectiveTimezone(
+    process.env,
+    resolveScheduleFromEnv(process.env, DEFAULT_SCHEDULE)
+  );
   const results = await Promise.all(
     sources.map(src => syncSingleSource(src, timezone, forceRefresh, targetTime))
   );

@@ -6,6 +6,9 @@ import {
   verifyStudioSessionToken,
   extractStudioToken,
   isRequestStudioAuthenticated,
+  isHttpsRequest,
+  buildSessionCookieHeader,
+  buildClearSessionCookieHeader,
   extractClientIp,
   checkAuthRateLimit,
   recordAuthFailure,
@@ -114,4 +117,24 @@ test('checkAuthRateLimit & recordAuthFailure block IP after AUTH_MAX_FAILURES un
   clearAuthFailures(clientIp);
   clearAuthFailures(clientIp2);
 });
+
+test('isHttpsRequest & cookie helpers enforce Secure flag when served over HTTPS', () => {
+  assert.equal(isHttpsRequest({}, false), false);
+  assert.equal(isHttpsRequest({}, true), true);
+  assert.equal(isHttpsRequest({ 'x-forwarded-proto': 'https' }, false), true);
+  assert.equal(isHttpsRequest({ 'x-forwarded-proto': 'https, http' }, false), true);
+  assert.equal(isHttpsRequest({ 'x-forwarded-proto': 'http' }, false), false);
+  assert.equal(isHttpsRequest({ 'x-forwarded-ssl': 'on' }, false), true);
+
+  const plainCookie = buildSessionCookieHeader('tok.1', 3600, false);
+  assert.ok(!plainCookie.includes('; Secure'));
+  assert.ok(plainCookie.includes('HttpOnly; SameSite=Lax; Max-Age=3600'));
+
+  const secureCookie = buildSessionCookieHeader('tok.1', 3600, true);
+  assert.ok(secureCookie.endsWith('; Secure'));
+
+  assert.ok(!buildClearSessionCookieHeader(false).includes('; Secure'));
+  assert.ok(buildClearSessionCookieHeader(true).endsWith('; Secure'));
+});
+
 

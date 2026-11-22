@@ -4,6 +4,7 @@ import {
   verifyStudioPassword,
   createStudioSessionToken,
   isRequestStudioAuthenticated,
+  isHttpsRequest,
   buildSessionCookieHeader,
   buildClearSessionCookieHeader,
   extractClientIp,
@@ -17,10 +18,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
+
+  const secureCookie = isHttpsRequest(req.headers, Boolean((req.socket as any)?.encrypted));
 
   const passwordRequired = isStudioPasswordRequired();
 
@@ -30,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'DELETE') {
-    res.setHeader('Set-Cookie', buildClearSessionCookieHeader());
+    res.setHeader('Set-Cookie', buildClearSessionCookieHeader(secureCookie));
     return res.status(200).json({ authenticated: false, passwordRequired });
   }
 
@@ -70,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     clearAuthFailures(clientIp);
     const token = createStudioSessionToken();
-    res.setHeader('Set-Cookie', buildSessionCookieHeader(token));
+    res.setHeader('Set-Cookie', buildSessionCookieHeader(token, undefined, secureCookie));
     return res.status(200).json({
       authenticated: true,
       passwordRequired: true,

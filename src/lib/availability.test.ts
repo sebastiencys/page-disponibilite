@@ -17,6 +17,10 @@ import {
   normalizeProfileMode,
   sanitizeOptionalContactField,
   getOffDayLabel,
+  getScheduleHeadingLabel,
+  resolveProfileFromEnv,
+  resolveScheduleFromEnv,
+  resolveEffectiveTimezone,
   type CalendarEvent,
   type ScheduleConfig,
   type AnonymizedSlot,
@@ -895,7 +899,208 @@ test('supports profile mode (person vs shop), optional contact sanitization, and
 
   const mondayLunchEn = getEffectiveLunchBreak(TEST_SCHEDULE, 1, 'en');
   assert.equal(mondayLunchEn.label, 'Lunch break');
+
+  const sunday = parisDate('2026-11-08T14:00:00');
+  assert.equal(calculateAvailability(sunday, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'fr', 'person').title, 'Hors horaires de travail');
+  assert.equal(calculateAvailability(sunday, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'en', 'person').title, 'Outside working hours');
+  assert.equal(calculateAvailability(sunday, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'fr', 'shop').title, 'Fermé');
+  assert.equal(calculateAvailability(sunday, TEST_SCHEDULE, [], undefined, 'Europe/Paris', 'en', 'shop').title, 'Closed');
+
+  assert.equal(getScheduleHeadingLabel('shop', 'fr'), "Horaires d'ouverture");
+  assert.equal(getScheduleHeadingLabel('shop', 'en'), 'Opening hours');
+  assert.equal(getScheduleHeadingLabel('person', 'fr'), 'Horaires habituels de travail');
+  assert.equal(getScheduleHeadingLabel('person', 'en'), 'Regular working hours');
 });
+
+test('resolveProfileFromEnv overrides personal.json cleanly including explicit empty strings', () => {
+  const baseProfile = {
+    name: 'Prénom Nom',
+    role: 'Développeur',
+    company: 'Studio',
+    email: 'prenom@example.com',
+    bookingUrl: 'https://cal.example.com',
+    mode: 'person' as const,
+  };
+
+  // No env overrides -> preserves baseProfile cleanly
+  assert.deepEqual(resolveProfileFromEnv({}, baseProfile), baseProfile);
+
+  // Env overrides identity & explicitly hides email + bookingUrl + switches to shop
+  const overridden = resolveProfileFromEnv(
+    {
+      PROFILE_NAME: 'Cabinet Médical',
+      PROFILE_ROLE: 'Santé',
+      PROFILE_COMPANY: 'none',
+      PROFILE_EMAIL: '',
+      PROFILE_BOOKING_URL: 'null',
+      PROFILE_MODE: 'shop',
+    },
+    baseProfile
+  );
+  assert.deepEqual(overridden, {
+    name: 'Cabinet Médical',
+    role: 'Santé',
+    company: '',
+    email: '',
+    bookingUrl: '',
+    mode: 'shop',
+  });
+
+  // Single PERSONAL_JSON env var overrides personal.json, while individual PROFILE_* wins over PERSONAL_JSON
+  const fromJsonOnly = resolveProfileFromEnv(
+    {
+      PERSONAL_JSON: JSON.stringify({
+        name: 'Clinique Horizon',
+        role: 'Médecine',
+        company: 'Horizon',
+        email: null,
+        bookingUrl: '',
+        mode: 'shop',
+      }),
+    },
+    baseProfile
+  );
+  assert.deepEqual(fromJsonOnly, {
+    name: 'Clinique Horizon',
+    role: 'Médecine',
+    company: 'Horizon',
+    email: '',
+    bookingUrl: '',
+    mode: 'shop',
+  });
+
+  const b64Personal = Buffer.from(JSON.stringify({ name: 'B64 Profil', email: '' }), 'utf8').toString('base64');
+  const fromB64PlusOverride = resolveProfileFromEnv(
+    {
+      PERSONAL_JSON_BASE64: b64Personal,
+      PROFILE_ROLE: 'Prioritaire',
+    },
+    baseProfile
+  );
+  assert.equal(fromB64PlusOverride.name, 'B64 Profil');
+  assert.equal(fromB64PlusOverride.email, '');
+  assert.equal(fromB64PlusOverride.role, 'Prioritaire');
+});
+
+test('resolveScheduleFromEnv merges partial SCHEDULE_JSON / SCHEDULE_JSON_BASE64 and ignores invalid JSON', () => {
+  const custom = resolveScheduleFromEnv(
+    {
+      SCHEDULE_JSON: JSON.stringify({
+        timezone: 'America/Toronto',
+        days: { 6: { enabled: true, start: '10:00', end: '14:00' } },
+        lunchBreak: { enabled: false },
+        bufferMinutes: 15,
+      }),
+    },
+    TEST_SCHEDULE
+  );
+  assert.equal(custom.timezone, 'America/Toronto');
+  assert.deepEqual(custom.days[6], { enabled: true, start: '10:00', end: '14:00' });
+  assert.deepEqual(custom.days[1], TEST_SCHEDULE.days[1]);
+  assert.equal(custom.lunchBreak.enabled, false);
+  assert.equal(custom.lunchBreak.start, TEST_SCHEDULE.lunchBreak.start);
+  assert.equal(custom.bufferMinutes, 15);
+  assert.equal(resolveEffectiveTimezone({ TIMEZONE: 'Europe/London' }, custom), 'Europe/London');
+  assert.equal(resolveEffectiveTimezone({}, custom), 'America/Toronto');
+
+  const b64 = Buffer.from(JSON.stringify({ timezone: 'Asia/Tokyo' }), 'utf8').toString('base64');
+  assert.equal(resolveScheduleFromEnv({ SCHEDULE_JSON_BASE64: b64 }, TEST_SCHEDULE).timezone, 'Asia/Tokyo');
+
+  // Malformed JSON safely returns baseSchedule
+  assert.deepEqual(resolveScheduleFromEnv({ SCHEDULE_JSON: '{bad json' }, TEST_SCHEDULE), TEST_SCHEDULE);
+});
+
+test('resolveScheduleFromEnv supports granular SCHEDULE_* env vars, French/English day suffixes, lunches, and closures', () => {
+  // 1. Work days range + French hour syntax + per-day overrides (EN & FR suffixes + off)
+  const resolved = resolveScheduleFromEnv(
+    {
+      SCHEDULE_TIMEZONE: 'Indian/Reunion',
+      TIMEZONE: 'Europe/Paris',
+      SCHEDULE_WORK_DAYS: 'tue-fri',
+      SCHEDULE_HOURS: '08h30-17h30',
+      SCHEDULE_HOURS_FRI: '09:00-13:00',
+      SCHEDULE_START_MAR: '08:00',
+      SCHEDULE_DAY_SAT: 'true',
+      SCHEDULE_HOURS_SAM: '10:00-12:00',
+      SCHEDULE_LUNCH_HOURS: '12:30-13:30',
+      SCHEDULE_LUNCH_LABEL: 'Pause midi',
+      SCHEDULE_LUNCH_HOURS_JEU: '12:00-12:30',
+      SCHEDULE_LUNCH_ENABLED_MER: 'false',
+      SCHEDULE_LUNCH_HOURS_FRI: 'off',
+      SCHEDULE_BUFFER_MINUTES: '10',
+      SCHEDULE_CLOSURES: '12-25|Noël|annual; 2026-08-01..2026-08-15|Congés été|vacation',
+    },
+    TEST_SCHEDULE
+  );
+
+  // Specific SCHEDULE_TIMEZONE overrides generic TIMEZONE
+  assert.equal(resolved.timezone, 'Indian/Reunion');
+  assert.equal(
+    resolveEffectiveTimezone({ TIMEZONE: 'Europe/Paris', SCHEDULE_TIMEZONE: 'Indian/Reunion' }, resolved),
+    'Indian/Reunion'
+  );
+
+  // Monday disabled (not in tue-fri), Tuesday-Thursday active, Friday shortened, Saturday enabled via suffix
+  assert.deepEqual(resolved.days[1], { enabled: false, start: '08:30', end: '17:30' });
+  assert.deepEqual(resolved.days[2], { enabled: true, start: '08:00', end: '17:30' });
+  assert.deepEqual(resolved.days[3], { enabled: true, start: '08:30', end: '17:30' });
+  assert.deepEqual(resolved.days[4], { enabled: true, start: '08:30', end: '17:30' });
+  assert.deepEqual(resolved.days[5], { enabled: true, start: '09:00', end: '13:00' });
+  assert.deepEqual(resolved.days[6], { enabled: true, start: '10:00', end: '12:00' });
+  assert.deepEqual(resolved.days[0], { enabled: false, start: '08:30', end: '17:30' });
+
+  // Lunch global + per-day FR/EN overrides
+  assert.equal(resolved.lunchBreak.enabled, true);
+  assert.equal(resolved.lunchBreak.start, '12:30');
+  assert.equal(resolved.lunchBreak.end, '13:30');
+  assert.equal(resolved.lunchBreak.label, 'Pause midi');
+  assert.deepEqual(resolved.lunchBreak.days?.[4], { enabled: true, start: '12:00', end: '12:30' });
+  assert.deepEqual(resolved.lunchBreak.days?.[3], { enabled: false });
+  assert.deepEqual(resolved.lunchBreak.days?.[5], { enabled: false });
+
+  // Buffer and compact closures
+  assert.equal(resolved.bufferMinutes, 10);
+  assert.deepEqual(resolved.closures, [
+    { startDate: '12-25', label: 'Noël', annual: true },
+    { startDate: '2026-08-01', endDate: '2026-08-15', label: 'Congés été', type: 'vacation' },
+  ]);
+
+  // 2. Wrap-around work days list & "off" closing an enabled day & "none" clearing closures
+  const wrapSchedule = resolveScheduleFromEnv(
+    {
+      SCHEDULE_JSON: JSON.stringify({
+        bufferMinutes: 20,
+        closures: [{ startDate: '2026-05-01', label: '1er mai', type: 'holiday' }],
+      }),
+      SCHEDULE_WORK_DAYS: 'ven-lun',
+      SCHEDULE_HOURS_MON: 'repos',
+      SCHEDULE_BUFFER_MINUTES: '5',
+      SCHEDULE_CLOSURES: 'none',
+    },
+    TEST_SCHEDULE
+  );
+  assert.equal(wrapSchedule.days[5].enabled, true);
+  assert.equal(wrapSchedule.days[6].enabled, true);
+  assert.equal(wrapSchedule.days[0].enabled, true);
+  assert.equal(wrapSchedule.days[1].enabled, false); // Closed explicitly via SCHEDULE_HOURS_MON="repos"
+  assert.equal(wrapSchedule.days[2].enabled, false);
+  assert.equal(wrapSchedule.bufferMinutes, 5); // SCHEDULE_* overrides SCHEDULE_JSON
+  assert.deepEqual(wrapSchedule.closures, []);
+
+  // 3. Explicit "none" work days disables all days, while JSON array syntax works in SCHEDULE_CLOSURES
+  const closedAll = resolveScheduleFromEnv(
+    {
+      SCHEDULE_WORK_DAYS: 'none',
+      SCHEDULE_CLOSURES: JSON.stringify([{ startDate: '2026-11-11', label: 'Armistice', type: 'holiday' }]),
+    },
+    TEST_SCHEDULE
+  );
+  for (const d of [0, 1, 2, 3, 4, 5, 6] as const) {
+    assert.equal(closedAll.days[d].enabled, false);
+  }
+  assert.deepEqual(closedAll.closures, [{ startDate: '2026-11-11', label: 'Armistice', type: 'holiday' }]);
+});
+
 
 
 

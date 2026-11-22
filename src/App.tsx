@@ -21,6 +21,7 @@ import {
   normalizeAppLang,
   type AppLang,
   type AvailabilityResult,
+  type ScheduleConfig,
   type UserProfile,
   type AnonymizedSlot,
   type CalendarSummaryItem,
@@ -51,7 +52,12 @@ export default function App() {
   const [publicLang, setPublicLang] = useState<AppLang>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      return normalizeAppLang(params.get('lang') ?? undefined);
+      const explicit = params.get('lang');
+      if (explicit !== null) {
+        return normalizeAppLang(explicit);
+      }
+      const browserLang = navigator.languages?.[0] || navigator.language || '';
+      return normalizeAppLang(browserLang, 'fr');
     }
     return 'fr';
   });
@@ -105,8 +111,9 @@ export default function App() {
     }
   }, [isDark]);
 
-  // Profile data (read-only from config/personal.json, refreshed via /api/status)
+  // Profile & schedule (resolved from env vars or config/*.json via /api/status)
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [schedule, setSchedule] = useState<ScheduleConfig>(DEFAULT_SCHEDULE);
 
   const isStudioRoute = currentTab !== 'public';
   const studioLocked = authLoading || (passwordRequired && !isStudioAuthenticated);
@@ -138,6 +145,7 @@ export default function App() {
   const [calendarsSummary, setCalendarsSummary] = useState<CalendarSummaryItem[]>([]);
   const [upcomingSlots, setUpcomingSlots] = useState<AnonymizedSlot[]>([]);
   const [now, setNow] = useState(new Date());
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [timezone, setTimezone] = useState<string>(DEFAULT_SCHEDULE.timezone || 'Europe/Paris');
 
   // Current computed availability (initialized with client calculation, refreshed via server status)
@@ -148,7 +156,8 @@ export default function App() {
       [],
       { type: 'auto' },
       DEFAULT_SCHEDULE.timezone || 'Europe/Paris',
-      publicLang
+      publicLang,
+      DEFAULT_PROFILE.mode ?? 'person'
     );
   });
 
@@ -211,6 +220,9 @@ export default function App() {
           if (data.profile) {
             setProfile(data.profile);
           }
+          if (data.schedule) {
+            setSchedule(data.schedule);
+          }
           if (data.upcomingSlots) {
             setUpcomingSlots(data.upcomingSlots);
           }
@@ -226,15 +238,24 @@ export default function App() {
           if (data.timezone) {
             setTimezone(data.timezone);
           }
+          setLastSyncedAt(new Date());
         }
       } catch {
         // Fallback to local computation with timezone
         setAvailability(
-          calculateAvailability(new Date(), DEFAULT_SCHEDULE, [], { type: 'auto' }, timezone, activeLang)
+          calculateAvailability(
+            new Date(),
+            schedule,
+            [],
+            { type: 'auto' },
+            timezone,
+            activeLang,
+            profile?.mode ?? 'person'
+          )
         );
       }
     },
-    [publicLang, studioToken, timezone]
+    [publicLang, studioToken, timezone, profile?.mode, schedule]
   );
 
   const handleStudioUnlockSuccess = (newToken: string) => {
@@ -380,13 +401,18 @@ export default function App() {
           <PublicStatusPage
             profile={profile}
             availability={availability}
-            schedule={DEFAULT_SCHEDULE}
+            schedule={schedule}
             timezone={timezone}
             upcomingSlots={upcomingSlots}
             calendars={calendarsSummary}
             lang={publicLang}
             onChangeLang={setPublicLang}
             now={now}
+            lastSyncedAt={lastSyncedAt}
+            onRefresh={async () => {
+              setNow(new Date());
+              await fetchServerStatus();
+            }}
             onGoToStudio={() => setCurrentTab('signature')}
           />
         )}
@@ -428,7 +454,7 @@ export default function App() {
 
             {currentTab === 'simulator' && (
               <AvailabilitySimulator
-                schedule={DEFAULT_SCHEDULE}
+                schedule={schedule}
                 profile={profile}
                 timezone={timezone}
                 upcomingSlots={upcomingSlots}
@@ -440,7 +466,7 @@ export default function App() {
 
             {currentTab === 'schedule' && (
               <CalendarSchedule
-                schedule={DEFAULT_SCHEDULE}
+                schedule={schedule}
                 profileMode={profile.mode}
                 icsUrl={icsUrl}
                 onUpdateIcsUrl={setIcsUrl}

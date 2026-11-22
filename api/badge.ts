@@ -3,6 +3,10 @@ import {
   calculateAvailability,
   getCalendarSummaries,
   normalizeAppLang,
+  normalizeProfileMode,
+  resolveProfileFromEnv,
+  resolveScheduleFromEnv,
+  resolveEffectiveTimezone,
   DEFAULT_SCHEDULE,
   DEFAULT_PROFILE,
   type CalendarEvent,
@@ -27,6 +31,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
   res.setHeader('Access-Control-Expose-Headers', 'ETag');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -36,14 +43,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const style = normalizeBadgeStyle(query.style, 'pill');
   const theme = normalizeBadgeTheme(query.theme, 'light');
   const lang = normalizeAppLang(query.lang, 'fr');
+  const effectiveProfile = resolveProfileFromEnv(process.env, DEFAULT_PROFILE);
+  const mode = normalizeProfileMode(query.mode, effectiveProfile.mode ?? 'person');
   const sanitizeField = (val: unknown, fallback: string) => {
     if (typeof val !== 'string') return fallback;
     const trimmed = val.trim();
     return trimmed ? trimmed.slice(0, 120) : fallback;
   };
-  const safeName = sanitizeField(query.name, DEFAULT_PROFILE.name);
-  const safeRole = sanitizeField(query.role, DEFAULT_PROFILE.role);
-  const safeCompany = sanitizeField(query.company, DEFAULT_PROFILE.company);
+  const safeName = sanitizeField(query.name, effectiveProfile.name);
+  const safeRole = sanitizeField(query.role, effectiveProfile.role);
+  const safeCompany = sanitizeField(query.company, effectiveProfile.company);
 
   // Determine format from query, URL or accept header
   let format = (typeof query.format === 'string' ? query.format : '').toLowerCase();
@@ -73,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       now = parsedTime;
     }
   }
-  const schedule = DEFAULT_SCHEDULE;
+  const schedule = resolveScheduleFromEnv(process.env, DEFAULT_SCHEDULE);
   let events = defaultEvents;
   const override: ManualOverride = { type: 'auto' };
 
@@ -84,8 +93,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Calculate live availability (automatic truthful calendar & schedule evaluation)
-  const timezone = process.env.TIMEZONE || schedule.timezone || 'Europe/Paris';
-  const avail = calculateAvailability(now, schedule, events, override, timezone, lang);
+  const timezone = resolveEffectiveTimezone(process.env, schedule);
+  const avail = calculateAvailability(now, schedule, events, override, timezone, lang, mode);
 
   if (format === 'json') {
     const calendarSummaries = getCalendarSummaries(

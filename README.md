@@ -50,7 +50,9 @@ Vos informations affichées sur la page publique et dans la signature e-mail (en
 ```
 
 - **`email`** / **`bookingUrl`** : Optionnels. Définissez à `null` ou `""` pour masquer automatiquement les boutons *Prendre rendez-vous* / *Envoyer un e-mail*.
-- **`mode`** *(optionnel, défaut `"person"`)* : Choisit le libellé des jours désactivés entre `"person"` (**Repos** / *Off*) et `"shop"` (**Fermé** / *Closed*). Peut être surchargé via `PROFILE_MODE`.
+- **`mode`** *(optionnel, défaut `"person"`)* : Adapte automatiquement les libellés entre `"person"` (**Repos** / *Hors horaires de travail* / *Horaires habituels de travail*) et `"shop"` (**Fermé** / *Horaires d'ouverture*). Peut être surchargé via `PROFILE_MODE` ou `?mode=shop|person`.
+
+> 💡 **Alternative 100 % `.env` (multi-dépôts / Vercel)** : Vous pouvez tout regrouper dans **une seule variable** `PERSONAL_JSON='{"name":...}'` et `SCHEDULE_JSON='{"timezone":...}'` dans `.env` ou sur Vercel — le Studio intègre un **convertisseur JSON → `.env`** dans les onglets *Signature* et *Agenda & Horaires* pour compresser vos JSON et les copier en 1 clic. Les variables unitaires **`PROFILE_*`** et **`SCHEDULE_*`** *(horaires globaux, jours travaillés, surcharges par jour `_MON`/`_LUN`/`_1`, pauses, fermetures)* restent aussi supportées et sont prioritaires sur les JSON.
 
 ### 2. Horaires & Pauses Déjeuner (`config/schedule.json`)
 
@@ -164,6 +166,7 @@ Toutes les routes publiques de badges sont accessibles sans authentification, av
 | `style` | SVG, PNG | `pill`, `card`, `signature`, `dot` | `pill` | Choisit la variante visuelle (voir dimensions ci-dessous) |
 | `theme` | SVG, PNG | `light`, `dark`, `transparent`, `transparent-dark` | `light` | Palette claire (fond blanc), sombre (`#0f172a`), transparente texte foncé (`transparent`) ou transparente texte clair (`transparent-dark` pour signatures/sites en mode sombre) |
 | `lang` | SVG, PNG, JSON, `/api/status` | `fr`, `en` | `fr` | Langue des libellés et du format horaire (`09h00` en `fr`, `09:00` en `en`) |
+| `mode` | SVG, PNG, JSON, `/api/status` | `person`, `shop` | `config/personal.json` | Bascule la sémantique *Personne* (*Hors horaires*, *Repos*) vs *Boutique* (*Fermé*, *Horaires d'ouverture*) |
 | `time` | SVG, PNG, JSON, `/api/status` | Date ISO 8601 (ex. `2026-11-23T10:00:00%2B04:00`) | *Maintenant* | Évalue et rend le statut à une date/heure précise (simulation) |
 | `name` | SVG, PNG, JSON | Texte libre *(max 120 car.)* | `config/personal.json` | Surcharge le nom affiché sur le badge / dans le JSON |
 | `role` | SVG, PNG, JSON | Texte libre *(max 120 car.)* | `config/personal.json` | Surcharge le poste / spécialité |
@@ -273,4 +276,11 @@ Définissez vos variables dans `.env` en local (ou dans les **Environment Variab
 - **`STUDIO_PASSWORD`** : Mot de passe pour masquer et protéger l'accès au Studio (générateur de signature, simulateur, horaires & guide) :
   - Les visiteurs de la page publique et les images de signature (`/api/badge.png`, `/api/badge.svg`) restent accessibles sans mot de passe.
   - L'accès au Studio via `/studio`, `?view=studio` ou le lien discret en pied de page demande le mot de passe configuré avant d'afficher l'interface d'administration.
-- **`PROFILE_MODE`** *(optionnel)* : Surcharge la propriété `"mode"` de `config/personal.json` (`"person"` par défaut pour *Repos / Off*, ou `"shop"` pour *Fermé / Closed*).
+- **`PERSONAL_JSON`** *(ou **`PERSONAL_JSON_BASE64`**, optionnel)* : Remplace `config/personal.json` en une seule variable (générable en 1 clic via le convertisseur intégré au Studio). Les champs unitaires optionnels **`PROFILE_NAME`**, **`PROFILE_ROLE`**, **`PROFILE_COMPANY`**, **`PROFILE_EMAIL`**, **`PROFILE_BOOKING_URL`**, **`PROFILE_MODE`** restent utilisables en complément et priment sur `PERSONAL_JSON`.
+- **`SCHEDULE_JSON`** *(ou **`SCHEDULE_JSON_BASE64`**, optionnel)* : Surcharge `config/schedule.json` via une chaîne JSON compacte sur 1 ligne (convertisseur JSON → `.env` intégré dans l'onglet **Agenda & Horaires** du Studio). Toute propriété omise hérite automatiquement de `config/schedule.json`.
+- **Variables granulaires `SCHEDULE_*`** *(optionnelles, prioritaires sur `SCHEDULE_JSON` et `config/schedule.json`)* : Permettent de gérer tout l'agenda directement dans `.env` sans JSON :
+  - **Fuseau & marge** : `SCHEDULE_TIMEZONE` *(prioritaire sur `TIMEZONE`)*, `SCHEDULE_BUFFER_MINUTES`.
+  - **Horaires & jours de travail** : `SCHEDULE_WORK_DAYS` *(ex. `"mon-fri"`, `"tue-fri"`, `"mar,mer,jeu,ven"`, `"1,2,3,4,5"`, `"none"`)*, `SCHEDULE_HOURS` *(ex. `"09:00-18:00"` ou `"08h30-17h30"`)*, ou `SCHEDULE_START` / `SCHEDULE_END`.
+  - **Surcharges par jour** *(suffixes `_MON`/`_LUN`/`_1`, `_TUE`/`_MAR`/`_2`, `_WED`/`_MER`/`_3`, `_THU`/`_JEU`/`_4`, `_FRI`/`_VEN`/`_5`, `_SAT`/`_SAM`/`_6`, `_SUN`/`_DIM`/`_0`)* : `SCHEDULE_HOURS_FRI="09:00-13:00"` *(ou `"off"` / `"repos"` pour fermer)*, `SCHEDULE_START_MON`, `SCHEDULE_END_MON`, `SCHEDULE_DAY_SAT="true"`.
+  - **Pause déjeuner globale & par jour** : `SCHEDULE_LUNCH_HOURS` *(ou `"off"`)*, `SCHEDULE_LUNCH_START`, `SCHEDULE_LUNCH_END`, `SCHEDULE_LUNCH_LABEL`, `SCHEDULE_LUNCH_ENABLED`, et leurs équivalents suffixés (`SCHEDULE_LUNCH_HOURS_THU="12:00-12:30"`, `SCHEDULE_LUNCH_ENABLED_WED="false"`, `SCHEDULE_LUNCH_START_FRI`, `SCHEDULE_LUNCH_END_FRI`, `SCHEDULE_LUNCH_LABEL_FRI`).
+  - **Fermetures & jours fériés (`SCHEDULE_CLOSURES`)** : accepte soit un tableau JSON `[...]`, soit la syntaxe compacte séparée par `;` : `"12-25|Noël|annual; 2026-08-01..2026-08-15|Congés d'été|vacation"` *(ou `"none"`/`"[]"` pour effacer)*.

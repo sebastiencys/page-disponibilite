@@ -42,6 +42,7 @@ import {
   type BadgeTheme,
 } from '../lib/badgeSvg.ts';
 import { copyTextToClipboard } from '../lib/clipboard.ts';
+import { EnvJsonConverter } from './EnvJsonConverter.tsx';
 import {
   AUTO_REFRESH_OPTIONS,
   AUTO_REFRESH_STORAGE_KEY,
@@ -693,20 +694,20 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 </p>
               </div>
 
-              {/* JSON Badge */}
+              {/* JSON / Env Badge */}
               <div
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-medium border border-slate-200 dark:border-slate-700 shrink-0"
-                title="Configuré dans config/personal.json"
+                title="Configurable via .env (PERSONAL_JSON / PROFILE_*) ou config/personal.json"
               >
                 <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                config/personal.json
+                PERSONAL_JSON
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
               <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
               <span>
-                Ces informations sont <strong>sécurisées et protégées en lecture seule</strong> dans <code className="text-slate-800 dark:text-slate-100 font-mono font-semibold">config/personal.json</code> pour empêcher toute modification par des tiers.
+                Ces informations sont <strong>protégées côté serveur</strong> via la variable unique <code className="text-slate-800 dark:text-slate-100 font-mono font-semibold">PERSONAL_JSON</code> (ou <code className="font-mono">config/personal.json</code>).
               </span>
             </div>
 
@@ -766,6 +767,14 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 </div>
               </div>
             </div>
+
+            <EnvJsonConverter
+              envVarName="PERSONAL_JSON"
+              title="Convertir un personal.json → PERSONAL_JSON"
+              description="Collez le contenu complet de votre fichier personal.json pour le transformer en une seule variable d’environnement prête à copier."
+              currentObject={profile}
+              placeholder={`{\n  "name": "Prénom Nom",\n  "role": "Votre Poste",\n  "company": "Votre Entreprise",\n  "email": "",\n  "bookingUrl": "",\n  "mode": "person"\n}`}
+            />
           </div>
         </div>
 

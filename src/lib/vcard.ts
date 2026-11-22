@@ -1,4 +1,4 @@
-import type { UserProfile } from './availability.ts';
+import { sanitizeOptionalContactField, type UserProfile } from './availability.ts';
 
 function escapeVCardValue(val: string): string {
   return (val || '')
@@ -13,10 +13,16 @@ function escapeVCardValue(val: string): string {
  * Generates a privacy-safe RFC 6350/3.0 vCard containing strictly public profile details.
  */
 export function buildPublicVCard(profile: UserProfile, publicPageUrl?: string): string {
-  const fullName = (profile.name || '').trim() || 'Contact';
+  const fullName = sanitizeOptionalContactField(profile.name) || 'Contact';
   const parts = fullName.split(/\s+/).filter(Boolean);
   const firstName = parts[0] || '';
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+
+  const company = sanitizeOptionalContactField(profile.company);
+  const role = sanitizeOptionalContactField(profile.role);
+  const email = sanitizeOptionalContactField(profile.email);
+  const bookingUrl = sanitizeOptionalContactField(profile.bookingUrl);
+  const statusUrl = sanitizeOptionalContactField(publicPageUrl);
 
   const lines = [
     'BEGIN:VCARD',
@@ -25,20 +31,20 @@ export function buildPublicVCard(profile: UserProfile, publicPageUrl?: string): 
     `N:${escapeVCardValue(lastName)};${escapeVCardValue(firstName)};;;`,
   ];
 
-  if (profile.company?.trim()) {
-    lines.push(`ORG:${escapeVCardValue(profile.company)}`);
+  if (company) {
+    lines.push(`ORG:${escapeVCardValue(company)}`);
   }
-  if (profile.role?.trim()) {
-    lines.push(`TITLE:${escapeVCardValue(profile.role)}`);
+  if (role) {
+    lines.push(`TITLE:${escapeVCardValue(role)}`);
   }
-  if (profile.email?.trim()) {
-    lines.push(`EMAIL;TYPE=INTERNET,WORK:${profile.email.trim()}`);
+  if (email) {
+    lines.push(`EMAIL;TYPE=INTERNET,WORK:${email}`);
   }
-  if (profile.bookingUrl?.trim()) {
-    lines.push(`URL;TYPE=Booking:${profile.bookingUrl.trim()}`);
+  if (bookingUrl) {
+    lines.push(`URL;TYPE=Booking:${bookingUrl}`);
   }
-  if (publicPageUrl?.trim()) {
-    lines.push(`URL;TYPE=Status:${publicPageUrl.trim()}`);
+  if (statusUrl) {
+    lines.push(`URL;TYPE=Status:${statusUrl}`);
   }
 
   lines.push('END:VCARD');

@@ -134,12 +134,31 @@ export function isRequestStudioAuthenticated(
   return verifyStudioSessionToken(token, configuredPassword, nowMs);
 }
 
-export function buildSessionCookieHeader(token: string, maxAgeSeconds = 12 * 60 * 60): string {
-  return `${STUDIO_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+export function isHttpsRequest(
+  headers: Record<string, string | string[] | undefined>,
+  isSocketEncrypted: boolean = false
+): boolean {
+  if (isSocketEncrypted) return true;
+  const protoRaw = headers['x-forwarded-proto'] ?? headers['X-Forwarded-Proto'];
+  const proto = Array.isArray(protoRaw) ? protoRaw[0] : protoRaw;
+  if (typeof proto === 'string' && proto.split(',')[0]?.trim().toLowerCase() === 'https') {
+    return true;
+  }
+  const sslRaw = headers['x-forwarded-ssl'] ?? headers['X-Forwarded-Ssl'];
+  const ssl = Array.isArray(sslRaw) ? sslRaw[0] : sslRaw;
+  return typeof ssl === 'string' && ssl.trim().toLowerCase() === 'on';
 }
 
-export function buildClearSessionCookieHeader(): string {
-  return `${STUDIO_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+export function buildSessionCookieHeader(
+  token: string,
+  maxAgeSeconds = 12 * 60 * 60,
+  secure = false
+): string {
+  return `${STUDIO_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure ? '; Secure' : ''}`;
+}
+
+export function buildClearSessionCookieHeader(secure = false): string {
+  return `${STUDIO_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? '; Secure' : ''}`;
 }
 
 export const AUTH_MAX_FAILURES = 5;
