@@ -87,12 +87,11 @@ export const EmailGuideModal: React.FC = () => {
             Pour Gmail (Google Workspace & Personnel)
           </div>
           <ol className="list-decimal list-inside space-y-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 ml-2">
-            <li>Dans DispoLive, allez dans l'onglet <strong>Générateur de Signature</strong> et copiez le <strong>Lien direct vers l'image (.png)</strong>.</li>
+            <li>Dans DispoLive, allez dans l'onglet <strong>Générateur de Signature</strong> et cliquez sur <strong>Copier la signature visuelle (Ctrl+V)</strong> (ou copiez le <strong>Lien direct vers l'image (.png)</strong>).</li>
             <li>Ouvrez Gmail sur votre navigateur et cliquez sur la <strong>Roue crantée ⚙️</strong> en haut à droite &gt; <strong>Voir tous les paramètres</strong>.</li>
             <li>Faites défiler jusqu'à la section <strong>Signature</strong>.</li>
-            <li>Positionnez votre curseur là où vous voulez afficher votre disponibilité, puis cliquez sur l'icône <strong>Insérer une image 🖼️</strong> dans la barre d'outils.</li>
-            <li>Sélectionnez l'onglet <strong>"Adresse Web (URL)"</strong> et collez le lien de votre image.</li>
-            <li>Gmail affiche immédiatement le rond vert/rouge ! Cliquez sur <strong>Enregistrer les modifications</strong> en bas de page.</li>
+            <li>Collez directement avec <strong>Ctrl+V</strong> / <strong>Cmd+V</strong>, ou utilisez l'icône <strong>Insérer une image 🖼️</strong> &gt; <strong>"Adresse Web (URL)"</strong> pour n'ajouter que le badge.</li>
+            <li>Gmail affiche immédiatement le voyant dynamique ! Cliquez sur <strong>Enregistrer les modifications</strong> en bas de page.</li>
           </ol>
         </div>
 

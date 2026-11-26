@@ -210,4 +210,39 @@ test('validateExternalCalendarUrl throws ExternalCalendarUrlError (400) and read
   );
 });
 
+test('summarizeSyncError redacts secret URLs and populates SyncedCalendarInfo.error on failures', async () => {
+  const { summarizeSyncError, IcsTooLargeError } = await import('./calendarSync.ts');
 
+  assert.equal(
+    summarizeSyncError(new Error('Fetch failed for https://calendar.google.com/secret-token/basic.ics')),
+    'Fetch failed for [URL]'
+  );
+  assert.equal(summarizeSyncError(new Error('Erreur HTTP 404: Not Found')), 'HTTP 404');
+  assert.equal(summarizeSyncError(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })), 'Timeout 8s');
+  assert.equal(summarizeSyncError(new IcsTooLargeError()), 'Fichier > 5 Mo');
+
+  const origFetch = globalThis.fetch;
+  const origUrl = process.env.CALENDAR_ICS_URL;
+  clearCalendarSyncCacheForTests();
+
+  globalThis.fetch = (async () => {
+    return new Response('Not Found', { status: 404, statusText: 'Not Found' });
+  }) as typeof fetch;
+
+  try {
+    process.env.CALENDAR_ICS_URL = 'https://secret.example.com/private-key-123/basic.ics';
+    const res = await getSyncedCalendarEvents(undefined, true, new Date('2026-11-09T09:30:00Z'));
+    assert.equal(res.calendars.length, 1);
+    assert.equal(res.calendars[0].ok, false);
+    assert.equal(res.calendars[0].error, 'HTTP 404');
+    assert.ok(!res.calendars[0].error?.includes('private-key-123'));
+  } finally {
+    globalThis.fetch = origFetch;
+    if (origUrl === undefined) {
+      delete process.env.CALENDAR_ICS_URL;
+    } else {
+      process.env.CALENDAR_ICS_URL = origUrl;
+    }
+    clearCalendarSyncCacheForTests();
+  }
+});

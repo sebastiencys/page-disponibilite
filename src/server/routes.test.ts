@@ -426,3 +426,23 @@ test('/api/status and /api/badge.svg honor granular SCHEDULE_* env overrides (ho
     }
   }
 });
+
+test('/api/badge.svg and /api/badge.png emit distinct ETags for ?mode=person vs ?mode=shop even when titles match (e.g. lunch break)', async () => {
+  const lunchTimestamp = '2026-11-10T12:45:00%2B01:00';
+  const personReq = createMockReqRes('GET', `/api/badge.svg?mode=person&time=${lunchTimestamp}`);
+  await handleApiRequest(personReq.req, personReq.res);
+  const personRes = await personReq.done;
+  assert.equal(personRes.statusCode, 200);
+  const personEtag = personRes.headers['etag'];
+  assert.ok(personEtag);
+
+  // Sending personEtag for ?mode=shop must NOT return 304 and must emit a distinct ETag
+  const shopReq = createMockReqRes('GET', `/api/badge.svg?mode=shop&time=${lunchTimestamp}`, {
+    'if-none-match': personEtag,
+  });
+  await handleApiRequest(shopReq.req, shopReq.res);
+  const shopRes = await shopReq.done;
+  assert.equal(shopRes.statusCode, 200);
+  assert.notEqual(shopRes.headers['etag'], personEtag);
+});
+

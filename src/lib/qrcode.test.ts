@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  computeQrPngLayout,
   computeRsEcc,
   generateQrMatrix,
   gfMul,
@@ -69,4 +70,12 @@ test('renderQrSvg produces deterministic accessible crispEdges SVG markup', () =
   assert.ok(svg1.includes('<title>Public Status QR</title>'));
   assert.ok(svg1.includes('<path d="M'));
   assert.throws(() => renderQrSvg('x'.repeat(400)), /trop long/i);
+});
+
+test('computeQrPngLayout calculates crisp integer pixel scaling with quiet zone', () => {
+  const layout = computeQrPngLayout(29, 512, 3);
+  assert.equal(layout.margin, 3);
+  assert.equal(layout.moduleSize, Math.floor(512 / (29 + 6))); // 14 px per module
+  assert.equal(layout.canvasSize, 512);
+  assert.equal(layout.offset, Math.floor((512 - 35 * 14) / 2));
 });

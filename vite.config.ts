@@ -32,6 +32,18 @@ function readPersonalName(): string {
       // Ignore malformed PERSONAL_JSON
     }
   }
+  const personalB64Raw = process.env.PERSONAL_JSON_BASE64?.trim();
+  if (personalB64Raw) {
+    try {
+      const decoded = Buffer.from(personalB64Raw, 'base64').toString('utf8');
+      const parsed = JSON.parse(decoded);
+      if (typeof parsed?.name === 'string' && parsed.name.trim()) {
+        return parsed.name.trim();
+      }
+    } catch {
+      // Ignore malformed PERSONAL_JSON_BASE64
+    }
+  }
   const candidates = [
     path.resolve(__dirname, 'config/personal.json'),
     path.resolve(__dirname, 'config/personal.json.example'),
@@ -130,8 +142,7 @@ export default defineConfig(() => {
           navigateFallbackDenylist: [/^\/api\//, /^\/badge(\.(png|svg|json))?$/i],
         },
         devOptions: {
-          enabled: true,
-          type: 'module',
+          enabled: false,
         },
       }),
     ],

@@ -515,7 +515,11 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               {isEn ? 'No busy slots scheduled soon' : 'Aucun créneau occupé prévu prochainement'}
             </p>
             <p className="text-slate-400 dark:text-slate-500">
-              {isEn
+              {profile.mode === 'shop'
+                ? isEn
+                  ? 'Regular opening hours remain fully available.'
+                  : "Les horaires d'ouverture habituels restent entièrement disponibles."
+                : isEn
                 ? 'Normal working hours remain fully available.'
                 : 'Les créneaux de travail habituels sont entièrement disponibles.'}
             </p>
@@ -646,6 +650,21 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {(schedule.bufferMinutes || 0) > 0 && (
+          <div className="pt-2 text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-t border-slate-100 dark:border-slate-800">
+            <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+            <span>
+              {isEn
+                ? profile.mode === 'shop'
+                  ? `Includes a ±${schedule.bufferMinutes} min buffer around booked slots.`
+                  : `Includes a ±${schedule.bufferMinutes} min buffer around appointments.`
+                : profile.mode === 'shop'
+                ? `Inclut une marge de battement de ±${schedule.bufferMinutes} min autour des créneaux réservés.`
+                : `Inclut une marge de battement de ±${schedule.bufferMinutes} min autour des rendez-vous.`}
+            </span>
           </div>
         )}
       </div>

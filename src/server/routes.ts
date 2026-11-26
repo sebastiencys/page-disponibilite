@@ -30,8 +30,6 @@ import {
   normalizeBadgeStyle,
   normalizeBadgeTheme,
   ensureFontsLoaded,
-  type BadgeStyle,
-  type BadgeTheme,
 } from '../lib/badgeRenderer.ts';
 import { parseIcsEvents } from '../lib/icalParser.ts';
 import {
@@ -42,7 +40,11 @@ import {
   fetchSafeExternalIcs,
   type SyncedCalendarInfo,
 } from './calendarSync.ts';
-import { computeSemanticWeakEtag, matchesIfNoneMatch } from './etag.ts';
+import {
+  computeSemanticWeakEtag,
+  buildBadgeImageEtag,
+  matchesIfNoneMatch,
+} from './etag.ts';
 import {
   isStudioPasswordRequired,
   verifyStudioPassword,
@@ -403,7 +405,7 @@ export async function handleApiRequest(
       company: badgeCompany,
       lang: badgeLang,
     };
-    const etag = buildBadgeImageEtag('svg', avail, badgeOptions);
+    const etag = buildBadgeImageEtag('svg', avail, { ...badgeOptions, mode: requestMode });
     if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
       serveNotModified(res, etag, 'image/svg+xml; charset=utf-8');
       return true;
@@ -501,7 +503,7 @@ export async function handleApiRequest(
       company: badgeCompany,
       lang: badgeLang,
     };
-    const etag = buildBadgeImageEtag('png', avail, badgeOptions);
+    const etag = buildBadgeImageEtag('png', avail, { ...badgeOptions, mode: requestMode });
     if (matchesIfNoneMatch(req.headers['if-none-match'], etag)) {
       serveNotModified(res, etag, 'image/png');
       return true;
@@ -677,38 +679,6 @@ export async function handleApiRequest(
 
   // Not an API request handled here
   return false;
-}
-
-function buildBadgeImageEtag(
-  format: 'svg' | 'png',
-  avail: ReturnType<typeof calculateAvailability>,
-  options: {
-    style: BadgeStyle;
-    theme: BadgeTheme;
-    name: string;
-    role: string;
-    company: string;
-    lang: string;
-  }
-): string {
-  return computeSemanticWeakEtag({
-    format,
-    style: options.style,
-    theme: options.theme,
-    lang: options.lang,
-    name: options.name,
-    role: options.role,
-    company: options.company,
-    status: avail.status,
-    state: avail.state,
-    isWorkTime: avail.isWorkTime,
-    title: avail.title,
-    subtitle: avail.subtitle,
-    badgeColor: avail.badgeColor,
-    dotColor: avail.dotColor,
-    todayAppointmentsCount: avail.todayAppointmentsCount ?? 0,
-    todayAllDayAppointmentsCount: avail.todayAllDayAppointmentsCount ?? 0,
-  });
 }
 
 function serveNotModified(res: ServerResponse, etag: string, contentType: string) {

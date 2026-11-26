@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Clock,
   Coffee,
@@ -20,6 +20,7 @@ import {
   type ScheduleConfig,
   type DayOfWeek,
 } from '../lib/availability.ts';
+import { convertScheduleToGranularEnv } from '../lib/envJson.ts';
 import { EnvJsonConverter } from './EnvJsonConverter.tsx';
 
 interface EnvCalendarDisplay {
@@ -30,6 +31,7 @@ interface EnvCalendarDisplay {
   fromCache: boolean;
   lastSync: string | null;
   ok: boolean;
+  error?: string;
 }
 
 interface CalendarScheduleProps {
@@ -68,6 +70,11 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [showIcsHelp, setShowIcsHelp] = useState(false);
 
+  const granularEnvOutput = useMemo(
+    () => convertScheduleToGranularEnv(schedule, schedule.timezone),
+    [schedule]
+  );
+
   const handleSyncSubmit = async () => {
     if (!icsUrl) return;
     try {
@@ -83,7 +90,7 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-12">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Schedule & Working Days (Fixed via JSON) */}
+        {/* Left Column: Schedule & Working Days (Fixed via Env / JSON) */}
         <div className="lg:col-span-6 space-y-6">
           {/* Working Days Card */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xs space-y-5">
@@ -91,35 +98,38 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  Jours & Horaires de Travail
+                  {profileMode === 'shop' ? "Jours & Horaires d'Ouverture" : 'Jours & Horaires de Travail'}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Déterminent quand le voyant passe automatiquement en mode "Hors horaires".
+                  {profileMode === 'shop'
+                    ? 'Déterminent quand le voyant passe automatiquement en mode « Fermé ».'
+                    : 'Déterminent quand le voyant passe automatiquement en mode « Hors horaires ».'}
                 </p>
               </div>
 
               {/* JSON / Env Badge */}
               <div
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-mono font-medium border border-slate-200 dark:border-slate-700 shrink-0"
-                title="Configurable via SCHEDULE_JSON (.env) ou config/schedule.json"
+                title="Configurable via SCHEDULE_* / SCHEDULE_JSON (.env) ou config/schedule.json"
               >
                 <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                SCHEDULE_JSON
+                SCHEDULE_* / JSON
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
               <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
               <span>
-                Ces horaires sont <strong>protégés côté serveur</strong> via <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">SCHEDULE_JSON</code> dans <code className="font-mono">.env</code> (ou <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">config/schedule.json</code>).
+                Ces horaires sont <strong>protégés côté serveur</strong> via <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">SCHEDULE_JSON</code> ou les variables granulaires <code className="font-mono font-semibold text-slate-800 dark:text-slate-100">SCHEDULE_*</code> dans <code className="font-mono">.env</code> (ou <code className="font-mono">config/schedule.json</code>).
               </span>
             </div>
 
             <EnvJsonConverter
               envVarName="SCHEDULE_JSON"
-              title="Convertir un schedule.json → SCHEDULE_JSON"
-              description="Collez votre fichier schedule.json (même multi-lignes) pour le compresser en une seule ligne .env ou valeur Vercel prête à copier."
+              title="Exporter ou convertir les horaires (.env / Vercel)"
+              description="Collez votre fichier schedule.json (même multi-lignes) pour le compresser en SCHEDULE_JSON, ou basculez vers l'export granulaire SCHEDULE_*."
               currentObject={schedule}
+              granularEnvOutput={granularEnvOutput}
               placeholder={`{\n  "timezone": "Europe/Paris",\n  "days": {\n    "1": { "enabled": true, "start": "09:00", "end": "18:00" }\n  },\n  "lunchBreak": { "enabled": true, "start": "12:30", "end": "13:30", "label": "Pause déjeuner" }\n}`}
             />
 
@@ -147,7 +157,7 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                     </div>
 
                     {dayConf.enabled ? (
-                      <div className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                      <div className="text-xs font-mono font-semibold tabular-nums text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-700">
                         {dayConf.start.replace(':', 'h')} - {dayConf.end.replace(':', 'h')}
                       </div>
                     ) : (
@@ -159,6 +169,15 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                 );
               })}
             </div>
+
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs">
+              <span className="text-slate-600 dark:text-slate-300 font-medium">
+                {profileMode === 'shop' ? 'Marge de battement entre créneaux' : 'Marge de battement autour des RDV'} (<code className="font-mono text-[11px]">bufferMinutes</code>)
+              </span>
+              <span className="font-mono font-semibold tabular-nums text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                {(schedule.bufferMinutes || 0) > 0 ? `±${schedule.bufferMinutes} min` : '0 min'}
+              </span>
+            </div>
           </div>
 
           {/* Lunch Break Card */}
@@ -168,8 +187,11 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                 <Coffee className="w-5 h-5 text-amber-500" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Pause Déjeuner Quotidienne</h3>
               </div>
-              <span className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                config/schedule.json
+              <span
+                className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700"
+                title="Configurable via SCHEDULE_LUNCH_* / SCHEDULE_JSON (.env) ou config/schedule.json"
+              >
+                SCHEDULE_* / JSON
               </span>
             </div>
 
@@ -228,8 +250,11 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                 <CalendarOff className="w-5 h-5 text-violet-500 dark:text-violet-400" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Jours fériés & Congés</h3>
               </div>
-              <span className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                config/schedule.json
+              <span
+                className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700"
+                title="Configurable via SCHEDULE_CLOSURES / SCHEDULE_JSON (.env) ou config/schedule.json"
+              >
+                SCHEDULE_* / JSON
               </span>
             </div>
 
@@ -255,7 +280,7 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                           </span>
                         )}
                       </div>
-                      <span className="font-mono font-semibold text-violet-800 dark:text-violet-200 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-md border border-violet-200 dark:border-violet-800/70 shrink-0">
+                      <span className="font-mono font-semibold tabular-nums text-violet-800 dark:text-violet-200 bg-white dark:bg-slate-900 px-2.5 py-0.5 rounded-md border border-violet-200 dark:border-violet-800/70 shrink-0">
                         {rangeLabel}
                       </span>
                     </div>
@@ -264,11 +289,15 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
               </div>
             ) : (
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                Aucune fermeture planifiée. Vous pouvez ajouter des jours fériés ou congés via le tableau{' '}
+                Aucune fermeture planifiée. Ajoutez vos jours fériés ou congés via la variable{' '}
                 <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-slate-700 dark:text-slate-200">
-                  "closures"
+                  SCHEDULE_CLOSURES
                 </code>{' '}
-                dans <code className="font-mono">config/schedule.json</code>.
+                dans <code className="font-mono">.env</code> ou le tableau{' '}
+                <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-slate-700 dark:text-slate-200">
+                  &quot;closures&quot;
+                </code>{' '}
+                de <code className="font-mono">SCHEDULE_JSON</code> / <code className="font-mono">config/schedule.json</code>.
               </p>
             )}
           </div>
@@ -338,7 +367,11 @@ export const CalendarSchedule: React.FC<CalendarScheduleProps> = ({
                           </code>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                          <span>{cal.ok ? `${cal.eventCount} événements` : 'Erreur de synchro'}</span>
+                          <span className={!cal.ok ? 'text-amber-700 dark:text-amber-300 font-semibold' : ''}>
+                            {cal.ok
+                              ? `${cal.eventCount} événements`
+                              : `Erreur de synchro${cal.error ? ` (${cal.error})` : ''}`}
+                          </span>
                           {cal.lastSync && (
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
                               à {formatTimeShort(new Date(cal.lastSync), schedule.timezone || 'Europe/Paris')}

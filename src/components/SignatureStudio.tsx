@@ -28,8 +28,10 @@ import {
 } from 'lucide-react';
 import {
   normalizeAppLang,
+  normalizeProfileMode,
   sanitizeOptionalContactField,
   type AppLang,
+  type ProfileMode,
   type AvailabilityResult,
   DEFAULT_PROFILE,
   DEFAULT_SCHEDULE,
@@ -43,6 +45,7 @@ import {
 } from '../lib/badgeSvg.ts';
 import { copyTextToClipboard } from '../lib/clipboard.ts';
 import { EnvJsonConverter } from './EnvJsonConverter.tsx';
+import { convertProfileToGranularEnv } from '../lib/envJson.ts';
 import {
   AUTO_REFRESH_OPTIONS,
   AUTO_REFRESH_STORAGE_KEY,
@@ -104,6 +107,7 @@ interface SignatureStudioProps {
     company: string;
     email: string;
     bookingUrl: string;
+    mode?: ProfileMode;
   };
   timezone?: string;
   onUpdateProfile?: (field: string, value: string) => void;
@@ -122,8 +126,13 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
   onRefreshLive,
 }) => {
   const initialPrefs = useMemo(() => loadStudioPrefs(), []);
+  const isShopMode = normalizeProfileMode(profile.mode, 'person') === 'shop';
   const safeProfileEmail = sanitizeOptionalContactField(profile.email);
   const safeProfileBookingUrl = sanitizeOptionalContactField(profile.bookingUrl);
+  const granularProfileEnvOutput = useMemo(
+    () => convertProfileToGranularEnv(profile),
+    [profile]
+  );
   const [badgeStyle, setBadgeStyle] = useState<BadgeStyle>(initialPrefs.badgeStyle);
   const [badgeTheme, setBadgeTheme] = useState<BadgeTheme>(initialPrefs.badgeTheme);
   const [badgeLang, setBadgeLang] = useState<AppLang>(initialPrefs.badgeLang);
@@ -300,7 +309,13 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
       lang: badgeLang,
     });
     const safeBadgeSrc = escapeHtml(badgeSrc);
-    const bookText = badgeLang === 'en' ? '📅 Book a meeting directly' : '📅 Prendre rendez-vous directement';
+    const bookText = isShopMode
+      ? badgeLang === 'en'
+        ? '📅 Book online'
+        : '📅 Réserver en ligne'
+      : badgeLang === 'en'
+      ? '📅 Book a meeting directly'
+      : '📅 Prendre rendez-vous directement';
     const liveStatusText = badgeLang === 'en' ? 'Live availability' : 'Disponibilité en temps réel';
     const clickCalendarText = badgeLang === 'en' ? '(click to view calendar)' : "(cliquez pour voir l'agenda)";
 
@@ -507,7 +522,7 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                   {badgeStyle === 'pill' && `${pillDimLabel} • Capsule ${hasTodayRdvs ? '3 Lignes' : '2 Lignes'}`}
                   {badgeStyle === 'signature' && `${sigDimLabel} • Tout-en-un`}
                   {badgeStyle === 'card' && `${cardDimLabel} • Widget ${hasTodayRdvs ? '3 Lignes' : '2 Lignes'}`}
-                  {badgeStyle === 'dot' && `${dotDimLabel} • ${hasTodayRdvs ? 'Avec pastille RDV' : 'Discret'}`}
+                  {badgeStyle === 'dot' && `${dotDimLabel} • ${hasTodayRdvs ? (isShopMode ? 'Avec pastille du jour' : 'Avec pastille RDV') : 'Discret'}`}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2.5">
@@ -516,7 +531,9 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     id: 'pill',
                     label: 'Pill Moderne',
                     size: pillDimLabel,
-                    desc: 'Statut + horaire (+ RDV du jour si > 0)',
+                    desc: isShopMode
+                      ? 'Statut + horaire (+ réservations du jour si > 0)'
+                      : 'Statut + horaire (+ RDV du jour si > 0)',
                     badge: hasTodayRdvs ? '💊 3 Lignes' : '💊 2 Lignes',
                     bgPreview: 'rounded-full h-4 bg-emerald-100 border border-emerald-400 flex items-center px-1.5 gap-1',
                   },
@@ -524,7 +541,9 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     id: 'signature',
                     label: 'Signature Complète',
                     size: sigDimLabel,
-                    desc: 'Avatar + Nom + Statut (+ RDV du jour si > 0)',
+                    desc: isShopMode
+                      ? 'Avatar + Nom + Statut (+ réservations du jour si > 0)'
+                      : 'Avatar + Nom + Statut (+ RDV du jour si > 0)',
                     badge: '👤 Tout-en-un',
                     bgPreview: 'rounded-md h-7 bg-slate-100 border border-slate-300 p-1 flex items-center gap-1.5',
                   },
@@ -532,7 +551,9 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     id: 'card',
                     label: 'Carte Compacte',
                     size: cardDimLabel,
-                    desc: 'Widget encadré avec statut & RDV du jour',
+                    desc: isShopMode
+                      ? 'Widget encadré avec statut & réservations du jour'
+                      : 'Widget encadré avec statut & RDV du jour',
                     badge: '🗂️ Widget',
                     bgPreview: 'rounded-md h-6 bg-slate-100 border border-slate-300 p-1 flex flex-col justify-between',
                   },
@@ -540,7 +561,9 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                     id: 'dot',
                     label: 'Point Minimaliste',
                     size: dotDimLabel,
-                    desc: 'Rond discret + pastille RDV du jour si > 0',
+                    desc: isShopMode
+                      ? 'Rond discret + pastille réservations du jour si > 0'
+                      : 'Rond discret + pastille RDV du jour si > 0',
                     badge: hasTodayRdvs ? `🟢 + ${todayCount}` : '🟢 36px',
                     bgPreview: 'w-5 h-5 rounded-full bg-emerald-500 ring-2 ring-emerald-300 mx-auto my-1',
                   },
@@ -700,14 +723,14 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 title="Configurable via .env (PERSONAL_JSON / PROFILE_*) ou config/personal.json"
               >
                 <FileCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                PERSONAL_JSON
+                PROFILE_* / JSON
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
               <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
               <span>
-                Ces informations sont <strong>protégées côté serveur</strong> via la variable unique <code className="text-slate-800 dark:text-slate-100 font-mono font-semibold">PERSONAL_JSON</code> (ou <code className="font-mono">config/personal.json</code>).
+                Ces informations sont <strong>protégées côté serveur</strong> via <code className="text-slate-800 dark:text-slate-100 font-mono font-semibold">PERSONAL_JSON</code> ou les variables <code className="text-slate-800 dark:text-slate-100 font-mono font-semibold">PROFILE_*</code> (ou <code className="font-mono">config/personal.json</code>).
               </span>
             </div>
 
@@ -747,6 +770,22 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  Mode d&apos;affichage actif
+                </label>
+                <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center justify-between gap-2">
+                  <span className="font-semibold">
+                    {normalizeProfileMode(profile.mode, 'person') === 'shop'
+                      ? 'Boutique / Établissement (Ouvert / Fermé)'
+                      : 'Personne (Disponible / Hors horaires)'}
+                  </span>
+                  <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 shrink-0">
+                    mode: {normalizeProfileMode(profile.mode, 'person')}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
                   Lien de prise de rendez-vous
                 </label>
                 <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs sm:text-sm text-slate-700 dark:text-slate-200 select-all flex items-center justify-between">
@@ -770,9 +809,10 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
             <EnvJsonConverter
               envVarName="PERSONAL_JSON"
-              title="Convertir un personal.json → PERSONAL_JSON"
-              description="Collez le contenu complet de votre fichier personal.json pour le transformer en une seule variable d’environnement prête à copier."
+              title="Exporter ou convertir le profil (.env / Vercel)"
+              description="Collez le contenu de votre fichier personal.json pour le transformer en PERSONAL_JSON, ou basculez vers les variables unitaires PROFILE_*."
               currentObject={profile}
+              granularEnvOutput={granularProfileEnvOutput}
               placeholder={`{\n  "name": "Prénom Nom",\n  "role": "Votre Poste",\n  "company": "Votre Entreprise",\n  "email": "",\n  "bookingUrl": "",\n  "mode": "person"\n}`}
             />
           </div>
@@ -994,8 +1034,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       </div>
                       <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {badgeLang === 'en'
-                          ? `Framed widget ${cardDimLabel}: status, schedule${hasTodayRdvs ? ' and daily meetings' : ''}:`
-                          : `Widget encadré ${cardDimLabel} : statut, horaire${hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :`}
+                          ? `Framed widget ${cardDimLabel}: status, schedule${hasTodayRdvs ? (isShopMode ? " and today's bookings" : ' and daily meetings') : ''}:`
+                          : `Widget encadré ${cardDimLabel} : statut, horaire${hasTodayRdvs ? (isShopMode ? ' et réservations du jour' : ' et RDV du jour') : ''} sans coupure :`}
                       </div>
                       <div className="my-1 inline-block">
                         <img
@@ -1017,8 +1057,8 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                       </div>
                       <div className={`mb-2 text-[11px] font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         {badgeLang === 'en'
-                          ? `Pill ${pillDimLabel}: status, schedule${hasTodayRdvs ? ' and daily meetings' : ''}:`
-                          : `Capsule ${pillDimLabel} : statut, horaire${hasTodayRdvs ? ' et RDV du jour' : ''} sans coupure :`}
+                          ? `Pill ${pillDimLabel}: status, schedule${hasTodayRdvs ? (isShopMode ? " and today's bookings" : ' and daily meetings') : ''}:`
+                          : `Capsule ${pillDimLabel} : statut, horaire${hasTodayRdvs ? (isShopMode ? ' et réservations du jour' : ' et RDV du jour') : ''} sans coupure :`}
                       </div>
                       <div className="my-1 inline-block">
                         <img
@@ -1033,7 +1073,13 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
                   {safeProfileBookingUrl && (
                     <div className={`mt-3 text-xs font-medium ${badgeTheme === 'dark' || badgeTheme === 'transparent-dark' ? 'text-indigo-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                      {badgeLang === 'en' ? '📅 Book a meeting directly' : '📅 Prendre rendez-vous directement'}
+                      {isShopMode
+                        ? badgeLang === 'en'
+                          ? '📅 Book online'
+                          : '📅 Réserver en ligne'
+                        : badgeLang === 'en'
+                        ? '📅 Book a meeting directly'
+                        : '📅 Prendre rendez-vous directement'}
                     </div>
                   )}
                 </div>
@@ -1347,27 +1393,31 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Format 1: Pill Moderne */}
-          <div
+          <button
+            type="button"
+            aria-pressed={badgeStyle === 'pill'}
             onClick={() => setBadgeStyle('pill')}
-            className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
+            className={`w-full text-left p-5 rounded-2xl border transition-all cursor-pointer space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
               badgeStyle === 'pill'
                 ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
                 : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <span className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                 <span className="font-bold text-sm text-slate-900 dark:text-slate-100">1. Pill Moderne</span>
-              </div>
-              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
+              </span>
+              <span className="text-[11px] font-mono font-bold tabular-nums bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 {pillDimLabel}
               </span>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              Capsule aérée sur 2 lignes (3 lignes dès qu&apos;un RDV est prévu le jour-même). Idéal sous vos coordonnées textuelles.
-            </p>
-            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[70px] ${
+            </span>
+            <span className="block text-xs text-slate-600 dark:text-slate-400">
+              {isShopMode
+                ? "Capsule aérée sur 2 lignes (3 lignes dès qu'une réservation est prévue le jour-même). Idéal sous vos coordonnées textuelles."
+                : "Capsule aérée sur 2 lignes (3 lignes dès qu'un RDV est prévu le jour-même). Idéal sous vos coordonnées textuelles."}
+            </span>
+            <span className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[70px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
                 : badgeTheme === 'transparent-dark'
@@ -1393,37 +1443,41 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 alt="Aperçu Pill Moderne"
                 className="max-w-full rounded-full shadow-2xs"
               />
-            </div>
-            <div className="flex items-center justify-between pt-1 text-xs">
+            </span>
+            <span className="flex items-center justify-between pt-1 text-xs">
               <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Capsule {hasTodayRdvs ? '3 lignes' : '2 lignes'}</span>
               <span className={`font-semibold ${badgeStyle === 'pill' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'pill' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
-            </div>
-          </div>
+            </span>
+          </button>
 
           {/* Format 2: Signature Complète */}
-          <div
+          <button
+            type="button"
+            aria-pressed={badgeStyle === 'signature'}
             onClick={() => setBadgeStyle('signature')}
-            className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
+            className={`w-full text-left p-5 rounded-2xl border transition-all cursor-pointer space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
               badgeStyle === 'signature'
                 ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
                 : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <span className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
                 <span className="font-bold text-sm text-slate-900 dark:text-slate-100">2. Signature Complète (Tout-en-un)</span>
-              </div>
-              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
+              </span>
+              <span className="text-[11px] font-mono font-bold tabular-nums bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 {sigDimLabel}
               </span>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              Bannière complète intégrant avatar avec initiales, nom, poste/entreprise et boîte de statut (2 ou 3 lignes avec le nombre de RDV du jour).
-            </p>
-            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[120px] ${
+            </span>
+            <span className="block text-xs text-slate-600 dark:text-slate-400">
+              {isShopMode
+                ? 'Bannière complète intégrant avatar avec initiales, nom, rôle/établissement et boîte de statut (2 ou 3 lignes avec le nombre de réservations du jour).'
+                : 'Bannière complète intégrant avatar avec initiales, nom, poste/entreprise et boîte de statut (2 ou 3 lignes avec le nombre de RDV du jour).'}
+            </span>
+            <span className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[120px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
                 : badgeTheme === 'transparent-dark'
@@ -1449,37 +1503,41 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 alt="Aperçu Signature Complète"
                 className="max-w-full rounded-xl shadow-2xs"
               />
-            </div>
-            <div className="flex items-center justify-between pt-1 text-xs">
+            </span>
+            <span className="flex items-center justify-between pt-1 text-xs">
               <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Bannière de visite complète</span>
               <span className={`font-semibold ${badgeStyle === 'signature' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'signature' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
-            </div>
-          </div>
+            </span>
+          </button>
 
           {/* Format 3: Carte Compacte */}
-          <div
+          <button
+            type="button"
+            aria-pressed={badgeStyle === 'card'}
             onClick={() => setBadgeStyle('card')}
-            className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
+            className={`w-full text-left p-5 rounded-2xl border transition-all cursor-pointer space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
               badgeStyle === 'card'
                 ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
                 : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <span className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
                 <span className="font-bold text-sm text-slate-900 dark:text-slate-100">3. Carte Compacte</span>
-              </div>
-              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
+              </span>
+              <span className="text-[11px] font-mono font-bold tabular-nums bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 {cardDimLabel}
               </span>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              Widget encadré élégant avec votre nom en haut et encart de statut sur 2 lignes (3 lignes avec les RDV du jour).
-            </p>
-            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[110px] ${
+            </span>
+            <span className="block text-xs text-slate-600 dark:text-slate-400">
+              {isShopMode
+                ? 'Widget encadré élégant avec votre enseigne en haut et encart de statut sur 2 lignes (3 lignes avec les réservations du jour).'
+                : 'Widget encadré élégant avec votre nom en haut et encart de statut sur 2 lignes (3 lignes avec les RDV du jour).'}
+            </span>
+            <span className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[110px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
                 : badgeTheme === 'transparent-dark'
@@ -1505,37 +1563,41 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 alt="Aperçu Carte Compacte"
                 className="max-w-full rounded-xl shadow-2xs"
               />
-            </div>
-            <div className="flex items-center justify-between pt-1 text-xs">
+            </span>
+            <span className="flex items-center justify-between pt-1 text-xs">
               <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Widget encadré {hasTodayRdvs ? '3 lignes' : '2 lignes'}</span>
               <span className={`font-semibold ${badgeStyle === 'card' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'card' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
-            </div>
-          </div>
+            </span>
+          </button>
 
           {/* Format 4: Point Minimaliste */}
-          <div
+          <button
+            type="button"
+            aria-pressed={badgeStyle === 'dot'}
             onClick={() => setBadgeStyle('dot')}
-            className={`p-5 rounded-2xl border transition-all cursor-pointer space-y-3 ${
+            className={`w-full text-left p-5 rounded-2xl border transition-all cursor-pointer space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
               badgeStyle === 'dot'
                 ? 'border-indigo-600 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20 shadow-sm'
                 : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <span className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
                 <span className="font-bold text-sm text-slate-900 dark:text-slate-100">4. Point Minimaliste</span>
-              </div>
-              <span className="text-[11px] font-mono font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
+              </span>
+              <span className="text-[11px] font-mono font-bold tabular-nums bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md shadow-2xs">
                 {dotDimLabel}
               </span>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
-              Rond discret avec halo lumineux pulsant et petite pastille affichant le nombre de RDV prévus le jour-même (dès qu&apos;il y en a au moins 1).
-            </p>
-            <div className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[60px] ${
+            </span>
+            <span className="block text-xs text-slate-600 dark:text-slate-400">
+              {isShopMode
+                ? "Rond discret avec halo lumineux pulsant et petite pastille affichant le nombre de réservations prévues le jour-même (dès qu'il y en a au moins 1)."
+                : "Rond discret avec halo lumineux pulsant et petite pastille affichant le nombre de RDV prévus le jour-même (dès qu'il y en a au moins 1)."}
+            </span>
+            <span className={`pt-2 flex items-center justify-center p-3 rounded-xl border min-h-[60px] ${
               badgeTheme === 'dark'
                 ? 'bg-slate-950 border-slate-800'
                 : badgeTheme === 'transparent-dark'
@@ -1561,14 +1623,16 @@ export const SignatureStudio: React.FC<SignatureStudioProps> = ({
                 alt="Aperçu Point Minimaliste"
                 className="h-9 w-auto shadow-2xs"
               />
-            </div>
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <span className="text-slate-400 dark:text-slate-500 text-[11px]">Type : Rond indicateur{hasTodayRdvs ? ' + pastille RDV' : ' seul'}</span>
+            </span>
+            <span className="flex items-center justify-between pt-1 text-xs">
+              <span className="text-slate-400 dark:text-slate-500 text-[11px]">
+                Type : Rond indicateur{hasTodayRdvs ? (isShopMode ? ' + pastille du jour' : ' + pastille RDV') : ' seul'}
+              </span>
               <span className={`font-semibold ${badgeStyle === 'dot' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>
                 {badgeStyle === 'dot' ? '✓ Actuellement sélectionné' : 'Cliquer pour sélectionner'}
               </span>
-            </div>
-          </div>
+            </span>
+          </button>
         </div>
       </div>
 

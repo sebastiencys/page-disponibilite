@@ -497,3 +497,31 @@ export function renderQrSvg(text: string, options: QrSvgOptions = {}): string {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" shape-rendering="crispEdges" role="img" aria-label="${escapedTitle}"><title>${escapedTitle}</title><rect width="${totalSize}" height="${totalSize}" fill="${lightColor}" rx="2"/><path d="${pathParts.join('')}" fill="${darkColor}"/></svg>`;
 }
+
+export interface QrPngLayout {
+  margin: number;
+  moduleSize: number;
+  canvasSize: number;
+  offset: number;
+}
+
+/**
+ * Computes crisp integer pixel module scaling for client-side PNG QR export.
+ */
+export function computeQrPngLayout(
+  matrixSize: number,
+  targetSize = 512,
+  margin = 3
+): QrPngLayout {
+  const totalModules = Math.max(1, matrixSize + margin * 2);
+  const moduleSize = Math.max(1, Math.floor(targetSize / totalModules));
+  const usedSize = totalModules * moduleSize;
+  const canvasSize = Math.max(usedSize, targetSize);
+  const offset = Math.floor((canvasSize - usedSize) / 2);
+  return {
+    margin,
+    moduleSize,
+    canvasSize,
+    offset,
+  };
+}

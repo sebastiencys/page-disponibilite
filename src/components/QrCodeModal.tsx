@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Copy, Download, QrCode, X } from 'lucide-react';
-import { generateQrMatrix, renderQrSvg } from '../lib/qrcode.ts';
+import { computeQrPngLayout, generateQrMatrix, renderQrSvg } from '../lib/qrcode.ts';
 import type { AppLang } from '../lib/availability.ts';
 import { copyTextToClipboard } from '../lib/clipboard.ts';
 
@@ -47,7 +47,7 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({
           }
         }
       }
-      return { totalSize, pathData: parts.join('') };
+      return { matrix, totalSize, pathData: parts.join('') };
     } catch {
       return null;
     }
@@ -61,20 +61,59 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  };
+
   const handleDownloadSvg = () => {
     if (typeof document === 'undefined') return;
     const svg = renderQrSvg(url, {
       title: profileName ? `${profileName} — DispoLive` : 'DispoLive QR Code',
     });
     const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const objectUrl = URL.createObjectURL(blob);
+    triggerBlobDownload(blob, 'dispolive-qr.svg');
+  };
+
+  const handleDownloadPng = () => {
+    if (typeof document === 'undefined' || !qrData) return;
+    const { matrix } = qrData;
+    const { margin, moduleSize, canvasSize, offset } = computeQrPngLayout(matrix.size, 512, 3);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasSize;
+    canvas.height = canvasSize;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasSize, canvasSize);
+    ctx.fillStyle = '#0f172a';
+    for (let r = 0; r < matrix.size; r++) {
+      for (let c = 0; c < matrix.size; c++) {
+        if (matrix.modules[r][c]) {
+          ctx.fillRect(
+            offset + (c + margin) * moduleSize,
+            offset + (r + margin) * moduleSize,
+            moduleSize,
+            moduleSize
+          );
+        }
+      }
+    }
+
+    const dataUrl = canvas.toDataURL('image/png');
     const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = 'dispolive-qr.svg';
+    anchor.href = dataUrl;
+    anchor.download = 'dispolive-qr.png';
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   };
 
   return (
@@ -139,11 +178,11 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({
           {url}
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={handleCopy}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 transition-colors cursor-pointer"
+            className="flex-1 min-w-[130px] inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 transition-colors cursor-pointer whitespace-nowrap"
           >
             {copied ? (
               <>
@@ -162,10 +201,22 @@ export const QrCodeModal: React.FC<QrCodeModalProps> = ({
             type="button"
             onClick={handleDownloadSvg}
             disabled={!qrData}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-colors cursor-pointer"
+            aria-label={isEn ? 'Download SVG' : 'Télécharger SVG'}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 disabled:opacity-50 text-slate-800 dark:text-slate-100 transition-colors cursor-pointer whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{isEn ? 'Download SVG' : 'Télécharger SVG'}</span>
+            <span>SVG</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadPng}
+            disabled={!qrData}
+            aria-label={isEn ? 'Download PNG' : 'Télécharger PNG'}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>PNG</span>
           </button>
         </div>
       </div>

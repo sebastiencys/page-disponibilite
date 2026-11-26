@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Clock,
   Calendar as CalendarIcon,
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import {
   calculateAvailability,
+  computePresetDateTime,
   createDateInTimezone,
   getZonedDateParts,
   getEffectiveLunchBreak,
@@ -30,6 +31,7 @@ import {
   getOffDayLabel,
   type AppLang,
   type ProfileMode,
+  type SimulatorPreset,
   type ScheduleConfig,
   type UserProfile,
   type AvailabilityResult,
@@ -53,6 +55,7 @@ interface AvailabilitySimulatorProps {
   upcomingSlots?: AnonymizedSlot[];
   calendars?: CalendarSummaryItem[];
   appBaseUrl: string;
+  studioToken?: string;
   onGoToStudio?: () => void;
 }
 
@@ -63,6 +66,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   upcomingSlots = [],
   calendars = [],
   appBaseUrl,
+  studioToken = '',
   onGoToStudio,
 }) => {
   // Initialize with current zoned date & time
@@ -88,6 +92,24 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const [simMode, setSimMode] = useState<ProfileMode>(profile?.mode ?? 'person');
   const [copiedStyle, setCopiedStyle] = useState<string | null>(null);
 
+  const hasUserChangedModeRef = useRef(false);
+  const hasUserChangedDateTimeRef = useRef(false);
+
+  // Keep simulated mode synced when async /api/status resolves profile.mode (e.g. direct ?view=simulator load)
+  useEffect(() => {
+    if (!hasUserChangedModeRef.current && profile?.mode) {
+      setSimMode(profile.mode);
+    }
+  }, [profile?.mode]);
+
+  // Re-align simulated date/time when server timezone updates asynchronously before user interaction
+  useEffect(() => {
+    if (!hasUserChangedDateTimeRef.current) {
+      setDateStr(initialDateStr);
+      setTimeStr(initialTimeStr);
+    }
+  }, [timezone, initialDateStr, initialTimeStr]);
+
   // Minutes from 00:00 for the 24h interactive slider
   const sliderMinutes = useMemo(() => {
     const [h, m] = timeStr.split(':').map(Number);
@@ -98,6 +120,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
     const totalMinutes = parseInt(e.target.value, 10);
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
+    hasUserChangedDateTimeRef.current = true;
     setTimeStr(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
   };
 
@@ -138,7 +161,10 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
       try {
         const res = await fetch(
           `/api/status?time=${encodeURIComponent(simulatedIso)}&lang=${lang}&mode=${simMode}`,
-          { signal: controller.signal }
+          {
+            signal: controller.signal,
+            headers: studioToken ? { Authorization: `Bearer ${studioToken}` } : {},
+          }
         );
         if (res.ok) {
           const data = await res.json();
@@ -161,7 +187,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [simulatedIso, lang, simMode]);
+  }, [simulatedIso, lang, simMode, studioToken]);
 
   const simulatedAvailability = useMemo<AvailabilityResult>(() => {
     if (
@@ -218,62 +244,19 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
   const dayNames = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   const currentDayName = dayNames[simulatedParts.dayOfWeek];
 
-  // Quick preset shortcuts
-  const applyPreset = (presetType: 'morning' | 'lunch' | 'afternoon' | 'evening' | 'weekend' | 'closure' | 'now') => {
-    if (presetType === 'closure' && firstUpcomingClosure) {
-      setDateStr(firstUpcomingClosure.startDate);
-      setTimeStr('10:00');
-      return;
-    }
-    if (presetType === 'now') {
-      const parts = getZonedDateParts(new Date(), timezone);
-      const y = parts.year;
-      const m = String(parts.month).padStart(2, '0');
-      const d = String(parts.day).padStart(2, '0');
-      const h = String(parts.hour).padStart(2, '0');
-      const min = String(parts.minute).padStart(2, '0');
-      setDateStr(`${y}-${m}-${d}`);
-      setTimeStr(`${h}:${min}`);
-      return;
-    }
-
-    if (presetType === 'weekend') {
-      // Find upcoming Saturday
-      const d = new Date();
-      const currentDay = d.getDay();
-      const daysUntilSaturday = (6 - currentDay + 7) % 7 || 7;
-      d.setDate(d.getDate() + daysUntilSaturday);
-      const parts = getZonedDateParts(d, timezone);
-      const y = parts.year;
-      const m = String(parts.month).padStart(2, '0');
-      const day = String(parts.day).padStart(2, '0');
-      setDateStr(`${y}-${m}-${day}`);
-      setTimeStr('14:30');
-      return;
-    }
-
-    // For weekday presets: if current simulated day is weekend, shift to Monday
-    if (simulatedParts.dayOfWeek === 0 || simulatedParts.dayOfWeek === 6) {
-      const d = new Date(simulatedDate);
-      const currentDay = d.getDay();
-      const daysUntilMonday = ((1 - currentDay + 7) % 7) || 1;
-      d.setDate(d.getDate() + daysUntilMonday);
-      const parts = getZonedDateParts(d, timezone);
-      const y = parts.year;
-      const m = String(parts.month).padStart(2, '0');
-      const day = String(parts.day).padStart(2, '0');
-      setDateStr(`${y}-${m}-${day}`);
-    }
-
-    if (presetType === 'morning') {
-      setTimeStr('10:00');
-    } else if (presetType === 'lunch') {
-      setTimeStr('12:45');
-    } else if (presetType === 'afternoon') {
-      setTimeStr('15:30');
-    } else if (presetType === 'evening') {
-      setTimeStr('20:30');
-    }
+  // Quick preset shortcuts (100% computed in target timezone)
+  const applyPreset = (presetType: SimulatorPreset) => {
+    hasUserChangedDateTimeRef.current = presetType !== 'now';
+    const next = computePresetDateTime(
+      presetType,
+      new Date(),
+      dateStr,
+      timezone,
+      firstUpcomingClosure?.startDate,
+      schedule
+    );
+    setDateStr(next.dateStr);
+    setTimeStr(next.timeStr);
   };
 
   // SVGs for the 4 variants
@@ -407,8 +390,11 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button
                 type="button"
-                onClick={() => setSimMode('person')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                onClick={() => {
+                  hasUserChangedModeRef.current = true;
+                  setSimMode('person');
+                }}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   simMode === 'person'
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -418,8 +404,11 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setSimMode('shop')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                onClick={() => {
+                  hasUserChangedModeRef.current = true;
+                  setSimMode('shop');
+                }}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   simMode === 'shop'
                     ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -467,8 +456,11 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             <input
               type="date"
               value={dateStr}
-              onChange={e => setDateStr(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 dark:focus:border-indigo-400 transition-all"
+              onChange={e => {
+                hasUserChangedDateTimeRef.current = true;
+                setDateStr(e.target.value);
+              }}
+              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 dark:focus:border-indigo-400 transition-all tabular-nums"
             />
           </div>
 
@@ -481,8 +473,11 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             <input
               type="time"
               value={timeStr}
-              onChange={e => setTimeStr(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 dark:focus:border-indigo-400 transition-all font-mono"
+              onChange={e => {
+                hasUserChangedDateTimeRef.current = true;
+                setTimeStr(e.target.value);
+              }}
+              className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 dark:focus:border-indigo-400 transition-all font-mono tabular-nums"
             />
           </div>
 
@@ -613,7 +608,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
               <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
                 {(simulatedAvailability.todayAppointmentsCount ?? 0) > 0
                   ? (simulatedAvailability.todayAllDayAppointmentsCount ?? 0) > 0
-                    ? `${simulatedAvailability.todayAppointmentsCount} RDV (${simulatedAvailability.todayAllDayAppointmentsCount === simulatedAvailability.todayAppointmentsCount ? 'journée entière' : 'dont journée entière'})`
+                    ? `${simulatedAvailability.todayAppointmentsCount} RDV (${simulatedAvailability.todayAllDayAppointmentsCount === simulatedAvailability.todayAppointmentsCount ? 'journée entière' : 'dont journée entière'} • badges en 3 lignes + pastille)`
                     : `${simulatedAvailability.todayAppointmentsCount} RDV ce jour (badges en 3 lignes + pastille)`
                   : '0 RDV ce jour (badges compacts à 2 lignes)'}
               </span>
@@ -651,10 +646,14 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
         </div>
 
         {/* Explain Rule Matrix */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div
+          className={`grid grid-cols-1 gap-3 text-xs ${
+            (schedule.bufferMinutes || 0) > 0 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'
+          }`}
+        >
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">
             <span className="text-slate-400 dark:text-slate-400 block font-medium">1. Horaires du jour ({currentDayName})</span>
-            <span className="font-semibold text-slate-800 dark:text-slate-100">
+            <span className="font-semibold text-slate-800 dark:text-slate-100 tabular-nums">
               {activeClosure
                 ? `${getOffDayLabel(simMode, 'fr')} — ${activeClosure.label || (activeClosure.type === 'vacation' ? 'Congés' : 'Jour férié')}`
                 : daySchedule?.enabled
@@ -668,7 +667,7 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
             <span className="text-slate-400 dark:text-slate-400 block font-medium">
               2. Pause déjeuner ({currentDayName})
             </span>
-            <span className="font-semibold text-slate-800 dark:text-slate-100">
+            <span className="font-semibold text-slate-800 dark:text-slate-100 tabular-nums">
               {dayLunchBreak.enabled
                 ? `${dayLunchBreak.start} - ${dayLunchBreak.end}${dayLunchBreak.isCustomForDay ? ' (spécifique)' : ''}`
                 : 'Désactivée'}
@@ -679,9 +678,23 @@ export const AvailabilitySimulator: React.FC<AvailabilitySimulatorProps> = ({
               {simMode === 'shop' ? '3. Boutique ouverte ?' : '3. Heures de bureau actives ?'}
             </span>
             <span className={`font-semibold ${simulatedAvailability.isWorkTime ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}`}>
-              {simulatedAvailability.isWorkTime ? '✓ Oui (Période active)' : '✗ Non (En dehors des horaires)'}
+              {simulatedAvailability.isWorkTime
+                ? '✓ Oui (Période active)'
+                : simMode === 'shop'
+                ? '✗ Non (Fermé)'
+                : '✗ Non (En dehors des horaires)'}
             </span>
           </div>
+          {(schedule.bufferMinutes || 0) > 0 && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/80 space-y-1">
+              <span className="text-slate-400 dark:text-slate-400 block font-medium">
+                4. Marge autour des RDV
+              </span>
+              <span className="font-semibold text-indigo-700 dark:text-indigo-300 tabular-nums">
+                ±{schedule.bufferMinutes} min avant / après
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

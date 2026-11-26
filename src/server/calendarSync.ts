@@ -30,6 +30,7 @@ export interface SyncedCalendarInfo {
   fromCache: boolean;
   lastSync: string | null;
   ok: boolean;
+  error?: string;
 }
 
 interface CacheEntry {
@@ -53,6 +54,7 @@ const inFlightSyncs = new Map<
     ok: boolean;
     fromCache: boolean;
     fetchedAt: number | null;
+    error?: string;
   }>
 >();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache to avoid rate-limiting
@@ -97,6 +99,38 @@ export async function readLimitedIcsText(
 export function clearCalendarSyncCacheForTests(): void {
   memoryCacheMap.clear();
   inFlightSyncs.clear();
+}
+
+/**
+ * Summarizes an ICS fetch/parse failure into a short privacy-safe label (no secret URLs).
+ */
+export function summarizeSyncError(err: unknown): string {
+  const errObj = err as { name?: string; message?: string } | null | undefined;
+  const rawMessage =
+    typeof err === 'string'
+      ? err
+      : typeof errObj?.message === 'string'
+      ? errObj.message
+      : '';
+  const sanitized = rawMessage
+    .replace(/(?:https?|webcal):\/\/\S+/gi, '[URL]')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (errObj?.name === 'AbortError' || /\b(abort|aborted|timeout|timed out)\b/i.test(sanitized)) {
+    return 'Timeout 8s';
+  }
+  if (err instanceof IcsTooLargeError || /trop volumineux/i.test(sanitized)) {
+    return 'Fichier > 5 Mo';
+  }
+  const httpMatch = /Erreur HTTP (\d{3})/i.exec(sanitized);
+  if (httpMatch) {
+    return `HTTP ${httpMatch[1]}`;
+  }
+  if (!sanitized) {
+    return 'Erreur réseau';
+  }
+  return sanitized.length > 60 ? `${sanitized.slice(0, 57)}...` : sanitized;
 }
 
 /**
@@ -423,23 +457,27 @@ async function syncSingleSource(
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
+        let icsText: string;
+        try {
+          const res = await fetch(parsedUrl.toString(), {
+            signal: controller.signal,
+            cache: 'no-store',
+            headers: {
+              'User-Agent': 'DispoLive-Calendar-Sync/1.0',
+              'Cache-Control': 'no-cache, no-store',
+              Pragma: 'no-cache',
+            },
+          });
 
-        const res = await fetch(parsedUrl.toString(), {
-          signal: controller.signal,
-          cache: 'no-store',
-          headers: {
-            'User-Agent': 'DispoLive-Calendar-Sync/1.0',
-            'Cache-Control': 'no-cache, no-store',
-            Pragma: 'no-cache',
-          },
-        });
-        clearTimeout(timeout);
+          if (!res.ok) {
+            throw new Error(`Erreur HTTP ${res.status}: ${res.statusText}`);
+          }
 
-        if (!res.ok) {
-          throw new Error(`Erreur HTTP ${res.status}: ${res.statusText}`);
+          icsText = await readLimitedIcsText(res);
+        } finally {
+          clearTimeout(timeout);
         }
 
-        const icsText = await readLimitedIcsText(res);
         const nowDate = new Date(now);
         const parsed = parseIcsEvents(icsText, timezone, { now: nowDate });
 
@@ -459,16 +497,23 @@ async function syncSingleSource(
 
         return { entry, ok: true, fromCache: false, fetchedAt: now };
       } catch (err: any) {
-        console.warn(`[DispoLive] Error syncing calendar (${source.envVar}):`, err.message);
+        const errorSummary = summarizeSyncError(err);
+        console.warn(`[DispoLive] Error syncing calendar (${source.envVar}):`, errorSummary);
         if (cached && cached.url === source.url) {
           const staleEntry: CacheEntry = {
             ...cached,
             label: source.label,
             hasExplicitLabel: source.hasExplicitLabel,
           };
-          return { entry: staleEntry, ok: false, fromCache: true, fetchedAt: cached.fetchedAt };
+          return {
+            entry: staleEntry,
+            ok: false,
+            fromCache: true,
+            fetchedAt: cached.fetchedAt,
+            error: errorSummary,
+          };
         }
-        return { entry: null, ok: false, fromCache: false, fetchedAt: null };
+        return { entry: null, ok: false, fromCache: false, fetchedAt: null, error: errorSummary };
       }
     })();
 
@@ -481,6 +526,7 @@ async function syncSingleSource(
     ok: boolean;
     fromCache: boolean;
     fetchedAt: number | null;
+    error?: string;
   };
   try {
     syncResult = await syncPromise;
@@ -503,6 +549,7 @@ async function syncSingleSource(
         fromCache: syncResult.fromCache,
         lastSync: syncResult.fetchedAt !== null ? new Date(syncResult.fetchedAt).toISOString() : null,
         ok: syncResult.ok,
+        ...(!syncResult.ok && syncResult.error ? { error: syncResult.error } : {}),
       },
     };
   }
@@ -518,6 +565,7 @@ async function syncSingleSource(
       fromCache: false,
       lastSync: null,
       ok: false,
+      ...(syncResult.error ? { error: syncResult.error } : {}),
     },
   };
 }

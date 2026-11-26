@@ -1843,3 +1843,102 @@ export function getUpcomingClosures(
   return results;
 }
 
+export type SimulatorPreset =
+  | 'morning'
+  | 'lunch'
+  | 'afternoon'
+  | 'evening'
+  | 'weekend'
+  | 'closure'
+  | 'now';
+
+/**
+ * Pure timezone-safe preset date/time resolver for the AvailabilitySimulator.
+ * Performs all calendar weekday checks and day arithmetic in the target `timeZone`
+ * without relying on the browser's local timezone.
+ */
+export function computePresetDateTime(
+  presetType: SimulatorPreset,
+  now: Date,
+  currentSimulatedDateStr: string,
+  timeZone: string = 'Europe/Paris',
+  firstClosureDate?: string | null,
+  schedule?: ScheduleConfig
+): { dateStr: string; timeStr: string } {
+  const nowParts = getZonedDateParts(now, timeZone);
+  const nowDateStr = `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}-${String(nowParts.day).padStart(2, '0')}`;
+  const nowTimeStr = `${String(nowParts.hour).padStart(2, '0')}:${String(nowParts.minute).padStart(2, '0')}`;
+
+  if (presetType === 'now') {
+    return { dateStr: nowDateStr, timeStr: nowTimeStr };
+  }
+
+  if (presetType === 'closure') {
+    if (firstClosureDate && /^\d{4}-\d{2}-\d{2}$/.test(firstClosureDate)) {
+      return { dateStr: firstClosureDate, timeStr: '10:00' };
+    }
+    return { dateStr: nowDateStr, timeStr: '10:00' };
+  }
+
+  const getWeekdayFromDateStr = (dStr: string): DayOfWeek => {
+    const noonUtc = new Date(`${dStr}T12:00:00Z`);
+    return isNaN(noonUtc.getTime()) ? nowParts.dayOfWeek : (noonUtc.getUTCDay() as DayOfWeek);
+  };
+
+  if (presetType === 'weekend') {
+    const daysUntilSaturday = (6 - nowParts.dayOfWeek + 7) % 7 || 7;
+    let weekendDateStr = addDaysToDateStr(nowDateStr, daysUntilSaturday);
+    // If Saturday is worked in `schedule` while Sunday is off, pick Sunday for a true non-working weekend sample
+    if (schedule && schedule.days?.[6]?.enabled && !schedule.days?.[0]?.enabled) {
+      weekendDateStr = addDaysToDateStr(weekendDateStr, 1);
+    }
+    return {
+      dateStr: weekendDateStr,
+      timeStr: '14:30',
+    };
+  }
+
+  // Weekday presets ('morning' | 'lunch' | 'afternoon' | 'evening'):
+  // Determine weekday of currently selected calendar date using UTC noon on YYYY-MM-DD.
+  const validSimDate = /^\d{4}-\d{2}-\d{2}$/.test(currentSimulatedDateStr)
+    ? currentSimulatedDateStr
+    : nowDateStr;
+  const simDayOfWeek = getWeekdayFromDateStr(validSimDate);
+
+  let targetDateStr = validSimDate;
+  if (schedule) {
+    const isWorkingDay = (dStr: string) => {
+      const dow = getWeekdayFromDateStr(dStr);
+      return Boolean(schedule.days?.[dow]?.enabled) && !getClosureForDate(dStr, schedule);
+    };
+    if (!isWorkingDay(targetDateStr)) {
+      for (let offset = 1; offset <= 14; offset++) {
+        const candidate = addDaysToDateStr(validSimDate, offset);
+        if (isWorkingDay(candidate)) {
+          targetDateStr = candidate;
+          break;
+        }
+      }
+    }
+  } else {
+    if (simDayOfWeek === 6) {
+      // Saturday -> shift +2 days to Monday
+      targetDateStr = addDaysToDateStr(validSimDate, 2);
+    } else if (simDayOfWeek === 0) {
+      // Sunday -> shift +1 day to Monday
+      targetDateStr = addDaysToDateStr(validSimDate, 1);
+    }
+  }
+
+  const timeByPreset: Record<'morning' | 'lunch' | 'afternoon' | 'evening', string> = {
+    morning: '10:00',
+    lunch: '12:45',
+    afternoon: '15:30',
+    evening: '20:30',
+  };
+
+  return {
+    dateStr: targetDateStr,
+    timeStr: timeByPreset[presetType],
+  };
+}

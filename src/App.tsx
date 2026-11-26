@@ -460,6 +460,7 @@ export default function App() {
                 upcomingSlots={upcomingSlots}
                 calendars={calendarsSummary}
                 appBaseUrl={appBaseUrl}
+                studioToken={studioToken}
                 onGoToStudio={() => setCurrentTab('signature')}
               />
             )}

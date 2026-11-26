@@ -21,7 +21,11 @@ import {
   ensureFontsLoaded,
 } from '../src/lib/badgeRenderer.ts';
 import { getSyncedCalendarEvents } from '../src/server/calendarSync.ts';
-import { computeSemanticWeakEtag, matchesIfNoneMatch } from '../src/server/etag.ts';
+import {
+  computeSemanticWeakEtag,
+  buildBadgeImageEtag,
+  matchesIfNoneMatch,
+} from '../src/server/etag.ts';
 
 const defaultEvents: CalendarEvent[] = [];
 
@@ -123,23 +127,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (format === 'svg' || format === 'png') {
-    const etag = computeSemanticWeakEtag({
-      format,
+    const etag = buildBadgeImageEtag(format, avail, {
       style,
       theme,
-      lang,
       name: safeName,
       role: safeRole,
       company: safeCompany,
-      status: avail.status,
-      state: avail.state,
-      isWorkTime: avail.isWorkTime,
-      title: avail.title,
-      subtitle: avail.subtitle,
-      badgeColor: avail.badgeColor,
-      dotColor: avail.dotColor,
-      todayAppointmentsCount: avail.todayAppointmentsCount ?? 0,
-      todayAllDayAppointmentsCount: avail.todayAllDayAppointmentsCount ?? 0,
+      lang,
+      mode,
     });
     res.setHeader(
       'Content-Type',

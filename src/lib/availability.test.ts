@@ -6,6 +6,7 @@ import {
   DEFAULT_PROFILE,
   getNextWorkStart,
   createDateInTimezone,
+  computePresetDateTime,
   getZonedDateParts,
   getAnonymizedUpcomingSlots,
   getEffectiveLunchBreak,
@@ -1113,9 +1114,77 @@ test('resolveScheduleFromEnv supports granular SCHEDULE_* env vars, French/Engli
   assert.deepEqual(closedAll.closures, [{ startDate: '2026-11-11', label: 'Armistice', type: 'holiday' }]);
 });
 
+test('computePresetDateTime resolves weekend, weekday shifts, closures, and now strictly in target timezone', () => {
+  // Instant: 2026-11-14T08:30:00Z -> Saturday 09:30 in Europe/Paris, Friday 22:30 in Pacific/Honolulu!
+  const instant = new Date('2026-11-14T08:30:00Z');
 
+  // In Honolulu (Friday Nov 13), "weekend" should pick Saturday Nov 14 (tomorrow in Honolulu), NOT Nov 21!
+  assert.deepEqual(
+    computePresetDateTime('weekend', instant, '2026-11-13', 'Pacific/Honolulu'),
+    { dateStr: '2026-11-14', timeStr: '14:30' }
+  );
 
+  // In Paris (already Saturday Nov 14), "weekend" picks next Saturday Nov 21
+  assert.deepEqual(
+    computePresetDateTime('weekend', instant, '2026-11-14', 'Europe/Paris'),
+    { dateStr: '2026-11-21', timeStr: '14:30' }
+  );
 
+  // Weekday preset on Saturday 2026-11-14 shifts +2 days -> Monday 2026-11-16
+  assert.deepEqual(
+    computePresetDateTime('morning', instant, '2026-11-14', 'Europe/Paris'),
+    { dateStr: '2026-11-16', timeStr: '10:00' }
+  );
 
+  // Weekday preset on Sunday 2026-11-15 shifts +1 day -> Monday 2026-11-16
+  assert.deepEqual(
+    computePresetDateTime('lunch', instant, '2026-11-15', 'Pacific/Honolulu'),
+    { dateStr: '2026-11-16', timeStr: '12:45' }
+  );
 
+  // Weekday preset on Wednesday stays on Wednesday
+  assert.deepEqual(
+    computePresetDateTime('evening', instant, '2026-11-18', 'Indian/Reunion'),
+    { dateStr: '2026-11-18', timeStr: '20:30' }
+  );
+
+  // Closure preset picks upcoming closure date at 10:00
+  assert.deepEqual(
+    computePresetDateTime('closure', instant, '2026-11-14', 'Europe/Paris', '2026-12-25'),
+    { dateStr: '2026-12-25', timeStr: '10:00' }
+  );
+
+  // "now" returns exact zoned date & time in target timezone
+  assert.deepEqual(
+    computePresetDateTime('now', instant, '2026-11-14', 'Pacific/Honolulu'),
+    { dateStr: '2026-11-13', timeStr: '22:30' }
+  );
+
+  // Schedule-aware: when Monday is disabled (Tue-Fri schedule), Saturday + "morning" skips Monday 2026-11-16 -> Tuesday 2026-11-17
+  const tueToFriSchedule = {
+    ...TEST_SCHEDULE,
+    days: {
+      ...TEST_SCHEDULE.days,
+      1: { enabled: false, start: '09:00', end: '18:00' },
+    },
+  };
+  assert.deepEqual(
+    computePresetDateTime('morning', instant, '2026-11-14', 'Europe/Paris', null, tueToFriSchedule),
+    { dateStr: '2026-11-17', timeStr: '10:00' }
+  );
+
+  // Schedule-aware: if Saturday is a working day and Sunday is closed, "weekend" picks Sunday 2026-11-22
+  const satOpenSchedule = {
+    ...TEST_SCHEDULE,
+    days: {
+      ...TEST_SCHEDULE.days,
+      6: { enabled: true, start: '09:00', end: '13:00' },
+      0: { enabled: false, start: '09:00', end: '18:00' },
+    },
+  };
+  assert.deepEqual(
+    computePresetDateTime('weekend', instant, '2026-11-14', 'Europe/Paris', null, satOpenSchedule),
+    { dateStr: '2026-11-22', timeStr: '14:30' }
+  );
+});
 
